@@ -12,19 +12,26 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message != 'Initialize public Pixel Arcade frontend mirror'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Extract public frontend
-        run: mkdir -p _site && tar -xzf site.tar.gz -C _site
+        with:
+          repository: hellven73/pixel-portal
+          ref: 1f56585f1899be65116dba12c1c370c9e21c89e8
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Prepare website
+        run: npm ci --ignore-scripts && npm run build:pages
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: github-pages-dist
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
