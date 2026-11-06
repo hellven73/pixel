@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: hellven73/pixel-portal
-          ref: cd29bc52b96aa5a9b8b6f66e5abdd55e365c0e34
+          ref: 112a85635b516265b025d3f1c2a17922559da23c
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
