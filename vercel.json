@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "echo Static site has no package dependencies",
+  "buildCommand": "node build-vercel.mjs",
+  "outputDirectory": "vercel-dist",
+  "routes": [
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "https://hellven73-pixel-portal.onrender.com/$1"
+    }
+  ]
+}
