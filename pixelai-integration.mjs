@@ -8,11 +8,15 @@ const patchNote=`<article>
   </article>`;
 
 export function updateArcadeHTML(html) {
+  if (html.includes('<summary>Patch notes</summary>')) {
+    html=html.replace('<summary>Patch notes</summary>','<summary>Patch notes</summary>\n  '+patchNote);
+  } else {
+    html=html.replace('</section><section id="media-page"',`<details class="compact-explanation" id="patch-notes"><summary>Patch notes</summary>${patchNote}</details></section><section id="media-page"`);
+  }
   return html
     .replace('<head>','<head><script>window.pixelAILaunchId=new URLSearchParams(location.search).get("play")</script>')
     .replace(/<link\b[^>]*href="ai-chat\.css[^"]*"[^>]*>/gi,'')
-    .replace(/((?:hub|tools)\.js)\?v=[^"]+/g,'$1?v=pixelai-1')
-    .replace('<summary>Patch notes</summary>','<summary>Patch notes</summary>\n  '+patchNote);
+    .replace(/((?:hub|tools)\.js)\?v=[^"]+/g,'$1?v=pixelai-1');
 }
 
 export function updateTools(source) {
