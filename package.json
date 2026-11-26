@@ -1,0 +1,26 @@
+{
+  "name": "pixelarcade-release",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test worker/pixelai/worker.test.mjs",
+    "build:edge": "node build-vercel.mjs && node pixelai-build.mjs --edge",
+    "test:browser": "node test/pixelai-browser.mjs"
+  },
+  "dependencies": {
+    "dompurify": "3.5.0",
+    "esbuild": "0.28.2",
+    "fflate": "0.8.3",
+    "highlight.js": "11.12.0",
+    "katex": "0.19.1",
+    "marked": "18.3.0",
+    "pdfjs-dist": "6.5.438",
+    "wrangler": "4.168.0"
+  },
+  "devDependencies": {
+    "playwright": "1.65.1"
+  }
+}

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101019">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="PixelArcade’s AI workspace for exploring games, learning, and building browser projects.">
+  <title>PixelAI · PixelArcade</title>
+  <link rel="icon" href="mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M9 5v14"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></symbol>
+    <symbol id="i-out" viewBox="0 0 24 24"><path d="M6 18 18 6M8 6h10v10"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-2-13-4 16"/></symbol>
+    <symbol id="i-arena" viewBox="0 0 24 24"><path d="M8 5v14m8-14v14M5 8h6m2 8h6"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 8h16M4 16h16"/><circle cx="9" cy="8" r="2.5"/><circle cx="15" cy="16" r="2.5"/></symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24"><path d="M8 4H4v4m12-4h4v4m0 8v4h-4M4 16v4h4"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></symbol>
+    <symbol id="i-game" viewBox="0 0 24 24"><path d="M7 7h10c2 0 3 1 3.5 3l1 5c.4 2-1.7 3-3 2l-3-2h-7l-3 2c-1.5 1-3.4 0-3-2l1-5C4 8 5 7 7 7Z"/><path d="M8 9v4m-2-2h4m6-1h.1m2 2h.1"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.8c1.1 5.9 3.3 8.1 9.2 9.2-5.9 1.1-8.1 3.3-9.2 9.2-1.1-5.9-3.3-8.1-9.2-9.2 5.9-1.1 8.1-3.3 9.2-9.2Z"/></symbol>
+    <symbol id="i-study" viewBox="0 0 24 24"><path d="m3 9 9-4 9 4-9 4-9-4Zm4 2v5c2 3 8 3 10 0v-5m4-2v6"/></symbol>
+    <symbol id="i-command" viewBox="0 0 24 24"><path d="M8 8h8v8H8V8Zm0 0H6a2 2 0 1 1 2-2v2Zm8 0V6a2 2 0 1 1 2 2h-2Zm0 8h2a2 2 0 1 1-2 2v-2Zm-8 0v2a2 2 0 1 1-2-2h2Z"/></symbol>
+  </svg>
+  <div class="shell" id="shell">
+    <button class="scrim" id="scrim" type="button" aria-label="Close history"></button>
+    <aside id="sidebar" class="sidebar" aria-label="Conversation history">
+      <div class="sidebar-head">
+        <a class="brand" href="./"><img src="mark.svg" width="36" height="36" alt=""><strong>Pixel<span>AI</span></strong></a>
+        <button class="icon-button" id="collapse" aria-label="Collapse history" title="Collapse history"><svg><use href="#i-panel"/></svg></button>
+      </div>
+      <button class="new-chat" id="new-chat"><svg><use href="#i-plus"/></svg>New chat <kbd>Alt N</kbd></button>
+      <label class="history-search"><svg><use href="#i-search"/></svg><input id="history-search" type="search" placeholder="Search chats" aria-label="Search chats"></label>
+      <div class="history" id="history"></div>
+      <div class="side-bottom">
+        <button class="side-action" id="command"><svg><use href="#i-command"/></svg>Commands <kbd>⌘/Ctrl K</kbd></button>
+        <button class="side-action" id="settings"><svg><use href="#i-settings"/></svg>Settings</button>
+        <a class="side-action arcade-link" href="../arcade/"><svg><use href="#i-game"/></svg>Back to Arcade <span aria-hidden="true"><svg><use href="#i-out"/></svg></span></a>
+      </div>
+    </aside>
+    <main class="workspace" id="workspace">
+      <header class="toolbar">
+        <button class="icon-button toolbar-history" id="expand" aria-label="Open history" title="Open history"><svg><use href="#i-panel"/></svg></button>
+        <div class="picker">
+          <button class="model-trigger" id="model-button" aria-expanded="false" aria-controls="model-list"><span class="signal"></span><strong id="model-label">Auto</strong><svg><use href="#i-down"/></svg></button>
+          <div class="model-list" id="model-list" hidden></div>
+        </div>
+        <span id="temporary-badge" class="pill" hidden>Temporary chat</span>
+        <div class="toolbar-actions">
+          <button class="tool-button" id="studio-button" aria-pressed="false" title="Creator Studio"><svg><use href="#i-code"/></svg><span>Studio</span></button>
+          <button class="tool-button" id="arena-button" title="AI Arena"><svg><use href="#i-arena"/></svg><span>Arena</span></button>
+          <button class="icon-button" id="focus-button" aria-pressed="false" aria-label="Toggle focus mode" title="Focus mode"><svg><use href="#i-focus"/></svg></button>
+        </div>
+      </header>
+      <div class="work-area">
+        <div class="chat">
+          <div class="scroll" id="scroll">
+            <section class="welcome" id="welcome" aria-labelledby="greeting">
+              <div class="orb-space" aria-hidden="true"><div class="orb-ring"></div><div class="orb"><i></i><b></b></div><div class="orb-shadow"></div></div>
+              <h1 id="greeting">What are we playing today?</h1>
+              <p>Find your next game, build something, or ask anything.</p>
+              <div class="suggestions">
+                <button data-prompt="Recommend three games I can play on PixelArcade. I like quick arcade games."><svg><use href="#i-game"/></svg><span>Find my next game</span><b aria-hidden="true"><svg><use href="#i-out"/></svg></b></button>
+                <button data-prompt="Build a tiny original browser game where I dodge comets. Use separate fenced HTML, CSS, and JavaScript blocks."><svg><use href="#i-code"/></svg><span>Build a browser game</span><b aria-hidden="true"><svg><use href="#i-out"/></svg></b></button>
+                <button data-prompt="Explain a simple winning strategy for Hextris and give me one drill to practise."><svg><use href="#i-study"/></svg><span>Get a gameplay tip</span><b aria-hidden="true"><svg><use href="#i-out"/></svg></b></button>
+              </div>
+            </section>
+            <section class="messages" id="messages" aria-label="Messages" hidden></section>
+          </div>
+          <div class="compose-wrap" id="compose-wrap">
+            <div class="service-status" id="status" role="status"></div>
+            <div id="verification" aria-label="Browser verification" hidden></div>
+            <form class="composer" id="composer">
+              <div id="attachment-chip" class="attachment-chip" hidden><span></span><button type="button" id="remove-file" aria-label="Remove attachment">×</button></div>
+              <label class="sr-only" for="prompt">Message PixelAI</label>
+              <textarea id="prompt" rows="1" maxlength="3200" placeholder="Message PixelAI…"></textarea>
+              <div class="compose-actions">
+                <details class="attach-menu" id="attach-menu"><summary class="icon-button" aria-label="Attachment options" title="Attachment options"><svg><use href="#i-plus"/></svg></summary><div><button type="button" id="attach">Attach text or PDF</button></div></details>
+                <input id="file" type="file" accept=".txt,.md,.json,.csv,.js,.css,.html,.pdf,text/plain,application/pdf" hidden>
+                <button type="button" class="persona-button" id="persona-button" title="Select a persona"><svg><use href="#i-spark"/></svg><span id="persona-name">Assistant</span></button>
+                <span class="compose-spacer"></span>
+                <button type="button" class="icon-button" id="voice" aria-label="Dictate a message" title="Voice input" hidden><svg><use href="#i-mic"/></svg></button>
+                <button type="submit" class="send-button" id="send" aria-label="Send message" title="Send message"><svg><use href="#i-send"/></svg></button>
+                <button type="button" class="send-button" id="stop" aria-label="Stop generation" title="Stop generation" hidden><svg><use href="#i-stop"/></svg></button>
+              </div>
+            </form>
+            <p class="privacy-note">Chats stay in this browser. Prompts go to the selected AI provider.</p>
+          </div>
+        </div>
+        <section id="studio" class="studio" aria-label="Creator Studio" hidden></section>
+      </div>
+    </main>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialog-title">
+    <div class="dialog-top"><h2 id="dialog-title"></h2><form method="dialog"><button class="icon-button" aria-label="Close dialog"><svg><use href="#i-close"/></svg></button></form></div>
+    <div id="dialog-body"></div>
+  </dialog>
+  <noscript>Enable JavaScript to open PixelAI.</noscript>
+</body>
+</html>
