@@ -45,7 +45,7 @@ export function createStudio(container,{loadRich,notify}) {
     try {
       const rich=await loadRich();
       if (value===editor.value && language===select.value) rich.highlight(preview,value,language==='html'?'xml':language);
-    } catch { /* The plain editor stays available. */ }
+    } catch {}
   };
   const mode=value=>{
     get('.studio-code').hidden=value!=='code';

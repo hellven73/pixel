@@ -28,7 +28,6 @@ async function browserAssets() {
   const transformer=new URL('@huggingface/transformers/',dependencies);
   const runtime=new URL('onnxruntime-web/dist/',dependencies);
   files.set('local-runtime/transformers.js',await readFile(new URL('dist/transformers.min.js',transformer)));
-  // Compress both runtimes to fit Cloudflare’s per-asset size limit.
   for (const [device,suffix] of [['webgpu','.asyncify'],['wasm','']]) {
     const ort='ort-wasm-simd-threaded'+suffix;
     files.set('local-runtime/'+device+'.mjs',await readFile(new URL(ort+'.mjs',runtime)));

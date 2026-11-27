@@ -11,7 +11,6 @@ async function originStorage() {
 }
 
 function weightFile(key) {
-  // Include the pinned model revision to avoid reusing stale weights after an update.
   const revision=key.match(/\/resolve\/([a-f0-9]{40})\//)?.[1];
   const name=key.match(weightName)?.[1];
   return revision&&name?revision+'-'+name:null;

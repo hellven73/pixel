@@ -34,7 +34,6 @@ export async function openStream(model, messages, env, signal, fetcher) {
   });
 }
 
-// The browser consumes one compact format regardless of the upstream SSE implementation.
 export function normalizeStream(stream, model, abort) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();

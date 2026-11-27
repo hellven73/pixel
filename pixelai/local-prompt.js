@@ -7,7 +7,6 @@ export function boundedInputs(tokenizer,{messages,instructions,context}) {
     context && 'Available games (ID | title | category):\n'+context+
       '\nWhen suggesting a listed game, include its exact ID using [[game:ID]].'
   ].filter(Boolean).join('\n\n');
-  // Preserve the latest user message. Trim complete older turns if needed.
   const history=messages.slice(-9);
   for (;;) {
     while (history[0]?.role==='assistant') history.shift();

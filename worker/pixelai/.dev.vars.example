@@ -1,5 +1,3 @@
-# Copy to .dev.vars only for local development and keep it private.
-# Production values go into Wrangler secrets.
 GROQ_API_KEY=
 OPENROUTER_API_KEY=
 TURNSTILE_SECRET=

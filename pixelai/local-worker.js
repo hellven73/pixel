@@ -20,7 +20,6 @@ async function loadModel() {
   const {env}=runtime;
   ({TextStreamer}=runtime);
   env.allowLocalModels=false;
-  // The tokenizer registry also makes unversioned metadata requests.
   env.remotePathTemplate='{model}/resolve/'+revision+'/';
   env.useBrowserCache=false;
   env.useWasmCache=false;
