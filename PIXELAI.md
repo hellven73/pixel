@@ -6,7 +6,7 @@ PixelAI lives in this release repository. The existing Pages workflow still buil
 
 PixelAI can run SmolLM2 360M Instruct in a browser worker. Publish the static frontend to enable this mode. When no cloud API is configured, PixelAI selects **On-device** in compatible browsers. You can also select it from the model picker. The first send asks before downloading about 285 MB on WebGPU adapters with `shader-f16`, or about 400 MB using the slower CPU fallback. Weights are cached in the browser when storage allows it. Settings can remove the model, and stopping a reply also stops the model worker.
 
-Model files download from Hugging Face. Prompts, attachments, and generated text stay inside the browser in on-device mode. Cloud modes and AI Arena use the separately configured cloud API. SmolLM2 is intended for short, everyday prompts. [Rill architecture inspiration](https://github.com/Katsugachi/Rill), [SmolLM2 model and licence](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct), [Transformers.js](https://github.com/huggingface/transformers.js)
+Model files download from Hugging Face. On-device turns and their attachments stay inside the browser, including when you later send a cloud message in the same conversation. Cloud modes and AI Arena use the separately configured cloud API. SmolLM2 is intended for short, everyday prompts. [Rill architecture inspiration](https://github.com/Katsugachi/Rill), [SmolLM2 model and licence](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct), [Transformers.js](https://github.com/huggingface/transformers.js)
 
 ## Optional cloud setup
 

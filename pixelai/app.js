@@ -296,6 +296,12 @@ function editMessage(message) {
   openDialog('Branch conversation',fields);
 }
 function branch(source,index,text,file) {
+  if (source.messages[index]?.onDevice) {
+    if (!localAvailable) return notify('This on-device message can only be retried in a compatible browser.',true);
+    state.settings.model=localModel.id;
+    changeSettings();
+    syncControls();
+  }
   const next=newChat(source.temporary);
   next.title=source.title+' · Branch';
   next.folder=source.folder;
@@ -480,8 +486,8 @@ async function send(text) {
   if (run||!canSend()||!text.trim()) return;
   const local=usingLocal();
   if (local&&!state.settings.localAllowed) return confirmModelDownload(text);
-  const user={...newMessage('user',text),...(attachment?{file:attachment}:{})};
-  const answer={...newMessage('assistant',''),streaming:true};
+  const user={...newMessage('user',text),onDevice:local,...(attachment?{file:attachment}:{})};
+  const answer={...newMessage('assistant',''),onDevice:local,streaming:true};
   const target=chat;
   const payload=request(state.settings.model,contextFor(target,user),text);
   if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>4750) {

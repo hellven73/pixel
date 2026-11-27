@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {boundedInputs} from '../pixelai/local-prompt.js';
+import {contextFor} from '../pixelai/state.js';
 
 function mockTokenizer() {
   const calls=[];
@@ -42,4 +43,19 @@ test('an over-limit latest message is rejected without silently truncating it',(
   const {tokenizer,calls}=mockTokenizer();
   assert.throws(()=>boundedInputs(tokenizer,{messages:[{role:'user',content:'x'.repeat(2000)}]}),/too long/);
   assert.equal(calls[0].disposed,true);
+});
+
+
+test('on-device messages and attachments stay local after switching models',()=>{
+  const chat={messages:[
+    {role:'user',text:'Cloud turn'},
+    {role:'assistant',text:'Cloud reply'},
+    {role:'user',text:'Private turn',onDevice:true,file:{name:'notes.txt',text:'Private attachment'}},
+    {role:'assistant',text:'Private reply',onDevice:true},
+  ]};
+  const current={role:'user',text:'New turn'};
+  assert.deepEqual(contextFor(chat,current).map(message=>message.content),['Cloud turn','Cloud reply','New turn']);
+  const local=contextFor(chat,{...current,onDevice:true});
+  assert.match(local[2].content,/Private attachment/);
+  assert.equal(local[3].content,'Private reply');
 });

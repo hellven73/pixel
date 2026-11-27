@@ -31,7 +31,7 @@ export const newChat=temporary=>({id:crypto.randomUUID(),title:'New chat',update
 export const newMessage=(role,text)=>({id:crypto.randomUUID(),role,text});
 
 export function contextFor(chat,current) {
-  const history=chat.messages.filter(item=>item.text.trim()).slice(-17);
+  const history=chat.messages.filter(item=>item.text.trim()&&(current.onDevice||!item.onDevice)).slice(-17);
   return [...history,current].map(item=>({
     role:item.role,
     content:item.text+(item.file?.text?'\n\nAttached '+item.file.name+':\n'+item.file.text:'')
