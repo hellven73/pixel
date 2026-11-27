@@ -1,5 +1,6 @@
 import {asMarkdown,builtIn,contextFor,download,gameContext,load,newChat,newMessage,save} from './state.js';
 import {configuration,generate} from './transport.js';
+import {canUseLocalModel,generateLocal,localModel,removeLocalModel} from './local-model.js';
 import {codeFrom,createStudio} from './studio.js';
 
 const $=id=>document.getElementById(id);
@@ -8,6 +9,8 @@ const dialog=$('dialog'), dialogBody=$('dialog-body');
 const mobile=matchMedia('(max-width:760px)');
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 const state=load();
+const localAvailable=canUseLocalModel();
+const usingLocal=()=>state.settings.model===localModel.id;
 let chat=state.chats[0]||newChat(false);
 let service={ready:false,remaining:0,models:[]};
 let games=[];
@@ -48,7 +51,8 @@ function applySettings() {
   updateModelLabel();
 }
 function updateModelLabel() {
-  $('model-label').textContent=service.models.find(model=>model.id===state.settings.model)?.label||'Auto';
+  $('model-label').textContent=usingLocal()?localModel.label:service.models.find(model=>model.id===state.settings.model)?.label||'Auto';
+  $('privacy-note').textContent=usingLocal()?'On-device chat keeps prompts and attachments in this browser.':'Chats stay in this browser. Prompts go to the selected AI provider.';
 }
 function loadRich() {
   if (!richPromise) {
@@ -125,10 +129,11 @@ function resizePrompt() {
   prompt.style.height=Math.min(prompt.scrollHeight,112)+'px';
 }
 function fill(value) {prompt.value=value;resizePrompt();prompt.focus();}
+function canSend() {return usingLocal()?localAvailable:service.ready&&service.remaining>0;}
 function syncControls() {
   $('stop').hidden=!run;
   $('send').hidden=Boolean(run);
-  $('send').disabled=!service.ready||service.remaining===0;
+  $('send').disabled=!canSend();
   $('arena-button').disabled=!service.ready||service.remaining<2;
   $('temporary-badge').hidden=!chat.temporary;
 }
@@ -326,7 +331,7 @@ function settings() {
   });
   const memoryLabel=element('label','Use saved memory in requests');
   memoryLabel.prepend(remember);
-  const allowance=service.ready?('Shared free requests remaining: '+service.remaining+' · resets at 00:00 UTC.'):('The inference service is waiting for deployment configuration.');
+  const allowance=service.ready?('Shared free cloud requests remaining: '+service.remaining+' · resets at 00:00 UTC.'):('Cloud chat is waiting for deployment configuration.');
   fields.append(element('p',allowance),field('Theme',theme),field('Custom instructions',instructions),
     memoryLabel,field('Memory text',memory),fields.confirm,footer);
   footer.append(button('Clear memory',()=>{
@@ -335,6 +340,22 @@ function settings() {
     if (run) {run.discard=true;run.controller.abort();}
     state.chats=[];persist();createChat();
   })));
+  if (state.settings.localAllowed) {
+    const clearModel=button('Remove downloaded model',async()=>{
+      clearModel.disabled=true;
+      try {
+        await removeLocalModel();
+        state.settings.localAllowed=false;
+        changeSettings();
+        clearModel.remove();
+        fields.append(element('p','On-device model removed. Next use needs a new download.',{role:'status'}));
+      } catch (error) {
+        clearModel.disabled=false;
+        notify(error.message,true);
+      }
+    });
+    footer.prepend(clearModel);
+  }
   openDialog('Settings',fields);
 }
 function createFolder() {
@@ -417,12 +438,33 @@ function quota(value,conservative=false) {
   syncControls();
 }
 async function configure() {
-  try {
-    service=await configuration(AbortSignal.timeout(10000));
-    if (service.ready&&!service.models.some(model=>model.id===state.settings.model&&model.available)) state.settings.model='auto';
-    notify(service.ready?'':'Chat service setup is pending. Local tools and saved chats are available.');
-  } catch (error) {notify('Could not connect to PixelAI. Reload to retry.',true);}
+  let connectionFailed=false;
+  try {service=await configuration(AbortSignal.timeout(10000));}
+  catch {connectionFailed=true;}
+  if (!service.ready && state.settings.model==='auto' && localAvailable) state.settings.model=localModel.id;
+  if (service.ready && !usingLocal() && !service.models.some(model=>model.id===state.settings.model&&model.available)) {
+    state.settings.model='auto';
+  }
+  if (usingLocal()) {
+    if (!run) notify(localAvailable?'':'This browser does not support on-device chat. Select an available cloud mode.',!localAvailable);
+  } else if (connectionFailed) notify('Could not connect to cloud chat. Reload to retry.',true);
+  else if (!service.ready) notify('Cloud chat setup is pending. Local tools and saved chats are available.');
   applySettings();syncControls();
+}
+function confirmModelDownload(text) {
+  const content=element('div',null,{class:'dialog-actions'});
+  content.append(
+    element('p','First use downloads about 285 MB with compatible WebGPU or 400 MB in CPU mode. Once the model loads, prompts and attachments are processed on this device.'),
+    element('p','Your browser can cache the weights for later visits. Remove them from PixelAI Settings or clear this site’s data.'),
+    button('Download model and send',()=>{
+      state.settings.localAllowed=true;
+      persist();
+      dialog.close();
+      void send(text);
+    }),
+    button('Cancel',()=>dialog.close())
+  );
+  openDialog('Download the on-device model?',content);
 }
 function liveUpdate(job) {
   if (job.frame) return;
@@ -435,7 +477,9 @@ function liveUpdate(job) {
   });
 }
 async function send(text) {
-  if (run||!service.ready||service.remaining===0||!text.trim()) return;
+  if (run||!canSend()||!text.trim()) return;
+  const local=usingLocal();
+  if (local&&!state.settings.localAllowed) return confirmModelDownload(text);
   const user={...newMessage('user',text),...(attachment?{file:attachment}:{})};
   const answer={...newMessage('assistant',''),streaming:true};
   const target=chat;
@@ -461,8 +505,9 @@ async function send(text) {
     if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>4750) {
       throw Error('This message is too long. Shorten the prompt or attachment.');
     }
-    const signal=AbortSignal.any([job.controller.signal,AbortSignal.timeout(125000)]);
-    await generate(payload,{signal,announce:notify,onEvent:event=>{
+    const signal=AbortSignal.any([job.controller.signal,AbortSignal.timeout(local?900000:125000)]);
+    const reply=local?generateLocal:generate;
+    await reply(payload,{signal,announce:notify,onEvent:event=>{
       if (event.type==='quota') quota(event.value);
       if (event.type==='model') {answer.model=event.model;answer.provider=event.provider;}
       if (event.type==='text') {
@@ -620,13 +665,18 @@ $('model-button').onclick=()=>{
   list.hidden=!open;
   $('model-button').setAttribute('aria-expanded',String(open));
   if (!open) return;
-  const choices=[{id:'auto',label:'Auto',available:true,description:'Routes requests to an appropriate configured free model.'},...service.models];
+  const choices=[
+    {id:'auto',label:'Auto',available:service.ready,description:'Routes cloud requests to an appropriate configured free model.'},
+    {...localModel,available:localAvailable},
+    ...service.models
+  ];
   list.replaceChildren(...choices.map(model=>{
     const item=button(null,()=>{
-      state.settings.model=model.id;changeSettings();closeModels(true);
+      state.settings.model=model.id;changeSettings();syncControls();closeModels(true);
+      if (!run) notify(usingLocal()||service.ready?'':'Cloud chat setup is pending.');
     },{'aria-pressed':String(state.settings.model===model.id)});
     item.disabled=!model.available;
-    item.append(element('strong',model.label),element('small',(model.provider?model.provider+' · '+model.name+' · ':'')+model.description+(!model.available?' Unavailable.':'')));
+    item.append(element('strong',model.label),element('small',(model.name?[model.provider,model.name].filter(Boolean).join(' · ')+' · ':'')+model.description+(!model.available?' Unavailable.':'')));
     return item;
   }));
   list.querySelector('button:not(:disabled)')?.focus();

@@ -2,11 +2,12 @@ import {build} from 'esbuild';
 import {mkdir, readFile, readdir, rm, writeFile} from 'node:fs/promises';
 import {basename, join} from 'node:path';
 import {runInNewContext} from 'node:vm';
+import {gzipSync} from 'node:zlib';
 import {removedArcadeFile,updateArcadeHTML,updateCompactNav,updateGameLaunch,updateLocalLaunch,updateManual,updateTools} from './pixelai-integration.mjs';
 
 const source=new URL('./pixelai/',import.meta.url);
 const dependencies=new URL('./node_modules/',import.meta.url);
-const staticFiles=['index.html','style.css','mark.svg','app.js','state.js','config.js','transport.js','studio.js'];
+const staticFiles=['index.html','style.css','mark.svg','app.js','state.js','config.js','transport.js','studio.js','local-cache.js','local-model.js','local-prompt.js','local-worker.js'];
 let sharedAssets;
 
 async function browserAssets() {
@@ -24,6 +25,17 @@ async function browserAssets() {
     bundle:true, write:false, format:'esm', target:'es2022', minify:true
   });
   files.set('rich.js',outputFiles[0].contents);
+  const transformer=new URL('@huggingface/transformers/',dependencies);
+  const runtime=new URL('onnxruntime-web/dist/',dependencies);
+  files.set('local-runtime/transformers.js',await readFile(new URL('dist/transformers.min.js',transformer)));
+  // Compress both runtimes to fit Cloudflare’s per-asset size limit.
+  for (const [device,suffix] of [['webgpu','.asyncify'],['wasm','']]) {
+    const ort='ort-wasm-simd-threaded'+suffix;
+    files.set('local-runtime/'+device+'.mjs',await readFile(new URL(ort+'.mjs',runtime)));
+    files.set('local-runtime/'+device+'.wasm.bin',gzipSync(await readFile(new URL(ort+'.wasm',runtime))));
+  }
+  files.set('licenses/transformers.txt',await readFile(new URL('LICENSE',transformer)));
+  files.set('licenses/onnxruntime.txt',await readFile(new URL('licenses/onnxruntime.txt',source)));
   const katex=new URL('katex/dist/',dependencies);
   const css=(await readFile(new URL('katex.min.css',katex),'utf8')).replace(/,url\(fonts\/[^)]+\)(?:\s*format\([^)]+\))?/g,'');
   files.set('katex.css',css);
@@ -67,7 +79,7 @@ export async function pixelAIAssets(arcadeDirectory) {
 export async function writePixelAI(output,arcadeDirectory) {
   const assets=await pixelAIAssets(arcadeDirectory);
   const directory=join(output,'ai');
-  await Promise.all(['fonts','licenses'].map(name=>mkdir(join(directory,name),{recursive:true})));
+  await Promise.all(['fonts','licenses','local-runtime'].map(name=>mkdir(join(directory,name),{recursive:true})));
   await Promise.all(Array.from(assets,([name,data])=>writeFile(join(directory,name),data)));
 }
 

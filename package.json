@@ -6,11 +6,12 @@
     "node": ">=24"
   },
   "scripts": {
-    "test": "node --test worker/pixelai/worker.test.mjs",
+    "test": "node --test worker/pixelai/worker.test.mjs test/local-prompt.test.mjs",
     "build:edge": "node build-vercel.mjs && node pixelai-build.mjs --edge",
     "test:browser": "node test/pixelai-browser.mjs"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.2",
     "dompurify": "3.5.0",
     "esbuild": "0.28.2",
     "fflate": "0.8.3",

@@ -4,7 +4,7 @@ export const removedArcadeFile=name=>oldChatFiles.has(name);
 const patchNote=`<article>
     <h3>Meet PixelAI</h3>
     <time datetime="2026-11-27">27 November 2026</time>
-    <p>Ask for Arcade game recommendations, compare free AI models, or bring generated code into Creator Studio. Conversations can be saved and exported from your browser.</p>
+    <p>Chat with an on-device model on supported browsers, ask for Arcade game recommendations, or bring generated code into Creator Studio. Conversations can be saved and exported from your browser.</p>
   </article>`;
 
 export function updateArcadeHTML(html) {

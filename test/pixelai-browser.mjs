@@ -4,7 +4,7 @@ import {resolve,extname} from 'node:path';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 
-const type={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.json':'application/json','.png':'image/png','.woff2':'font/woff2'};
+const type={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.json':'application/json','.png':'image/png','.woff2':'font/woff2'};
 const server=createServer(async (request,response)=>{
   const {pathname}=new URL(request.url,'http://localhost');
   if (/\/ai\/config\.js$/.test(pathname)) {
@@ -155,6 +155,66 @@ try {
   assert.equal(await phone.locator('html').getAttribute('data-theme'),'ocean');
   assert.equal(await phone.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   if (process.env.PIXELAI_SCREENSHOTS) await phone.screenshot({path:resolve(process.env.PIXELAI_SCREENSHOTS,'pixelai-mobile.png'),animations:'disabled'});
+  const device=await browser.newContext();
+  const outbound=[];
+  await device.route('**/*',route=>{
+    if (route.request().url().startsWith(origin+'/')) return route.continue();
+    outbound.push(route.request().url());return route.abort();
+  });
+  await device.route('**/ai/config.js',route=>route.fulfill({
+    contentType:'text/javascript',body:"export const endpoint='';export const turnstileSiteKey='';"
+  }));
+  await device.addInitScript(()=>{
+    Object.defineProperty(navigator,'gpu',{value:{}});
+    window.workerStarts=0;
+    window.Worker=class extends EventTarget {
+      constructor() {super();window.workerStarts++;}
+      postMessage({messages}) {
+        if (messages.at(-1).content==='Test local cancellation') return;
+        queueMicrotask(()=>{
+          for (const data of [{type:'ready'},{type:'text',text:'Answer from this device.'},{type:'done'}]) {
+            this.dispatchEvent(new MessageEvent('message',{data}));
+          }
+        });
+      }
+      terminate() {window.workerStopped=true;}
+    };
+  });
+  const local=await device.newPage();
+  await local.goto(origin+'/ai/');
+  await local.getByRole('button',{name:'On-device',exact:true}).waitFor();
+  const localPrompt=local.getByRole('textbox',{name:'Message PixelAI'});
+  await localPrompt.fill('Keep this on this device');
+  await local.getByRole('button',{name:'Send message'}).click();
+  await local.getByRole('button',{name:'Cancel',exact:true}).click();
+  assert.equal(await localPrompt.inputValue(),'Keep this on this device');
+  assert.equal(await local.evaluate(()=>window.workerStarts),0);
+  await local.getByRole('button',{name:'Send message'}).click();
+  await local.getByRole('button',{name:'Download model and send'}).click();
+  await local.getByText('Answer from this device.',{exact:true}).waitFor();
+  assert.equal(await local.evaluate(()=>window.workerStarts),1);
+  assert.deepEqual(outbound,[]);
+  await localPrompt.fill('Test local cancellation');
+  await local.getByRole('button',{name:'Send message'}).click();
+  await local.getByRole('button',{name:'Stop generation'}).click();
+  await local.getByText('Reply stopped.',{exact:true}).waitFor();
+  assert.equal(await local.evaluate(()=>window.workerStopped),true);
+  const modelUrl='https://huggingface.co/test/model/resolve/'+'1'.repeat(40)+'/onnx/model_q4.onnx';
+  const cached=await local.evaluate(async key=>{
+    const {modelStorage}=await import('./local-cache.js');
+    const storage=await modelStorage();
+    await storage.put(key,new Response('Fixture weight data'));
+    return (await storage.match(key)).text();
+  },modelUrl);
+  assert.equal(cached,'Fixture weight data');
+  await local.getByRole('button',{name:'Settings'}).click();
+  await local.getByRole('button',{name:'Remove downloaded model'}).click();
+  await local.getByText(/On-device model removed/).waitFor();
+  assert.equal(await local.evaluate(async key=>{
+    const {modelStorage}=await import('./local-cache.js');
+    return Boolean(await (await modelStorage()).match(key));
+  },modelUrl),false);
+  await device.close();
   assert.deepEqual(errors,[]);
-  console.log('Browser checks passed: desktop and mobile, Pages navigation, gameplay, chat, Markdown, code, math, local history, context, Arena, cancellation, Studio isolation and ZIP.');
+  console.log('Browser checks passed: desktop and mobile, Pages navigation, gameplay, cloud and on-device chat, Markdown, code, math, local history, context, Arena, cancellation, Studio isolation and ZIP.');
 } finally {await browser.close();server.close();}

@@ -1,5 +1,5 @@
 const key='pixelai.workspace.v1';
-const empty=()=>({chats:[],personas:[],settings:{theme:'arcade',model:'auto',instructions:'',memory:'',remember:false,persona:'general',folders:[]}});
+const empty=()=>({chats:[],personas:[],settings:{theme:'arcade',model:'auto',localAllowed:false,instructions:'',memory:'',remember:false,persona:'general',folders:[]}});
 
 export const builtIn=[
   {id:'general',icon:'✦',name:'Assistant',description:'General questions and ideas.',instructions:''},
