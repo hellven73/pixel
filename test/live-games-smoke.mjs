@@ -14,7 +14,7 @@ async function verify(base){
  assert.deepEqual(new Set(data.games.map(game=>game.id)),expected,base+' games');
  for(const game of data.games){
   assert.equal(game.local,true,game.id);
-  const url=new URL(game.url,root);
+  const url=new URL(game.url,new URL('portal/',root));
   assert.equal(url.origin,new URL(root).origin,game.id);
   assert.ok(url.pathname.startsWith(new URL('arcade/',root).pathname),game.id);
  }
