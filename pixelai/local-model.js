@@ -1,11 +1,6 @@
 import {clearModelStorage} from './local-cache.js';
 
-export const localModel={
-  id:'local',
-  name:'SmolLM2 360M Instruct',
-  label:'On-device',
-  description:'Runs in this browser. First use downloads about 285–400 MB. Uses WebGPU when supported, with a slower CPU mode.'
-};
+import {localModels} from './local-models.js';
 
 export function canUseLocalModel() {
   return globalThis.isSecureContext && typeof WebAssembly==='object' &&
@@ -44,7 +39,7 @@ export function generateLocal(payload,{signal,announce,onEvent}) {
       switch (data.type) {
         case 'status': announce(data.message);break;
         case 'text': onEvent(data);break;
-        case 'ready': onEvent({type:'model',model:localModel.name,provider:data.device==='wasm'?'On-device CPU':'On-device WebGPU'});break;
+        case 'ready': onEvent({type:'model',model:localModels[payload.mode].name,provider:data.device==='wasm'?'On-device CPU':'On-device WebGPU'});break;
         case 'done': onEvent(data);finish();break;
         case 'error': finish(Error(data.message),{reset:data.reset});break;
       }

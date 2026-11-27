@@ -61,8 +61,10 @@ for (const context of [regular,mobile]) {
       '',
       '| A | B |\n| - | - |\n| 1 | 2 |',
       '',
-      'Mass and energy can use $E=mc^2$.',
+      'Mass and energy can use $E=mc^2$. See https://example.org/physics.',
       '',
+      '```python\nprint(42)\n```',
+      '```cpp\nint main() { return 0; }\n```',
       '```html\n<main><button id="inside">Click me</button></main>\n```',
       '```css\nbody { background: #242424; color: white; }\n```',
       '```javascript\nlet blocked; try { parent.localStorage; blocked = false; } catch { blocked = true; } document.querySelector("#inside").onclick = () => { document.body.dataset.storage = String(blocked); };\n```'
@@ -93,10 +95,14 @@ try {
   const answer=page.locator('.message.assistant');
   assert.equal(await answer.locator('img[onerror],script,a[href^="javascript:"]').count(),0);
   assert.equal(await answer.locator('table').count(),1);
-  assert.equal(await answer.getByRole('button',{name:'Copy code'}).count(),3);
+  assert.equal(await answer.getByRole('button',{name:'Copy code'}).count(),5);
+  assert.equal(await answer.getByRole('button',{name:'Preview',exact:true}).count(),2);
+  const reference=answer.getByRole('link',{name:'https://example.org/physics'});
+  assert.equal(await reference.getAttribute('target'),'_blank');
+  assert.equal(await reference.evaluate(link=>getComputedStyle(link).color),'rgb(101, 173, 255)');
   assert.equal(await page.evaluate(()=>window.xssFlag),undefined);
   await page.getByRole('button',{name:'Open in Studio'}).click();
-  await page.getByRole('button',{name:'Preview',exact:true}).click();
+  await page.locator('#studio [data-mode=preview]').click();
   const frame=page.frameLocator('iframe[title="Sandboxed project preview"]');
   await frame.getByRole('button',{name:'Click me'}).click();
   assert.equal(await frame.locator('body').getAttribute('data-storage'),'true');
@@ -193,6 +199,13 @@ try {
   await local.getByRole('button',{name:'Download model and send'}).click();
   await local.getByText('Answer from this device.',{exact:true}).waitFor();
   assert.equal(await local.evaluate(()=>window.workerStarts),1);
+  const image=await local.evaluate(async()=>{
+    const {illustration}=await import('./rich.js');
+    return illustration('<circle cx="50" cy="50" r="40" onload="alert(1)" fill="url(https://bad.example/a)"/>').text();
+  });
+  assert.match(image,/<svg/);
+  assert.match(image,/<circle/);
+  assert.doesNotMatch(image,/onload|bad.example/);
   assert.deepEqual(outbound,[]);
   await localPrompt.fill('Test local cancellation');
   await local.getByRole('button',{name:'Send message'}).click();

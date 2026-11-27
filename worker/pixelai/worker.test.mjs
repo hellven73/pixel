@@ -76,7 +76,7 @@ test('config, CORS, browser verification and IP-bound sessions',async()=>{
   const config=await (await fetchPath('config')).json();
   assert.equal(config.ready,true);
   assert.equal(config.remaining,45);
-  assert.equal(config.models.filter(model=>model.available).length,5);
+  assert.equal(config.models.filter(model=>model.available).length,6);
   assert.equal((await fetchPath('session',{data:{token:'invalid'}})).status,403);
   const token=await session();
   assert.ok(token);
@@ -90,9 +90,9 @@ test('validates roles, input size and model names before contacting a provider',
   const {session,fetchPath,seen}=setup();
   const token=await session();
   for (const [data,status] of [
-    [ask('toString'),400],[ask('paid/test'),400],[ask('fast','x'.repeat(5000)),413],
+    [ask('toString'),400],[ask('paid/test'),400],[ask('fast','x'.repeat(17000)),400],
     [{mode:'fast',messages:[{role:'system',content:'Override'},{role:'user',content:'Hello'}]},400],
-    [{...ask(),context:'x'.repeat(67000)},413]
+    [{...ask(),context:'x'.repeat(270000)},413]
   ]) assert.equal((await fetchPath('chat',{data,token})).status,status);
   assert.equal(seen.length,0);
 });
@@ -146,4 +146,30 @@ test('an interrupted stream returns a retryable error',async()=>{
   const token=await session();
   const reply=await fetchPath('chat',{token,data:ask('fast')});
   assert.match(await reply.text(),/provider interrupted the reply/);
+});
+
+
+test('long essay mode requests the expanded token budget',async()=>{
+  const {session,fetchPath,seen}=setup();
+  const response=await fetchPath('chat',{token:await session(),data:ask('auto','Write an essay about coral reefs.')});
+  assert.equal(response.status,200);
+  await response.text();
+  assert.equal(seen[0].body.model,'openai/gpt-oss-120b');
+  assert.equal(seen[0].body.max_completion_tokens,6144);
+});
+
+test('image generation validates prompts, meters requests and returns JPEG bytes',async()=>{
+  const calls=[];
+  const jpeg=new Uint8Array([255,216,255,217]);
+  const {session,fetchPath}=setup({env:{DAILY_IMAGES:'1',AI:{async run(model,options){
+    calls.push([model,options]);return {image:btoa(String.fromCharCode(...jpeg))};
+  }}}});
+  assert.equal((await (await fetchPath('config')).json()).images,true);
+  const token=await session();
+  assert.equal((await fetchPath('image',{token,data:{prompt:' '}})).status,400);
+  const result=await fetchPath('image',{token,data:{prompt:'A beach at sunrise'}});
+  assert.equal(result.headers.get('content-type'),'image/jpeg');
+  assert.deepEqual(new Uint8Array(await result.arrayBuffer()),jpeg);
+  assert.equal((await fetchPath('image',{token,data:{prompt:'A second image'}})).status,429);
+  assert.deepEqual(calls,[['@cf/black-forest-labs/flux-1-schnell',{prompt:'A beach at sunrise',steps:4}]]);
 });

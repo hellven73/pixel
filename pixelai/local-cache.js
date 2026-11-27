@@ -1,5 +1,5 @@
 const cacheName='pixelai-local-model-v1';
-const weightName=/\/onnx\/(model_q4(?:f16)?\.onnx)(?:\?|$)/;
+const weightName=/\/onnx\/([a-z0-9_]+\.onnx)(?:\?|$)/;
 const optional=promise=>promise.catch(()=>null);
 
 async function browserCache() {

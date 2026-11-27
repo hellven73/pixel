@@ -135,3 +135,21 @@ export async function generate(payload,{signal,announce,onEvent}) {
     reader.releaseLock();
   }
 }
+
+
+export async function createImage(prompt,{signal,announce,onEvent}) {
+  const token=await authorize(signal,announce);
+  signal.throwIfAborted();
+  announce('Creating image…');
+  const response=await service('/v1/image',{
+    method:'POST',signal,
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+    body:JSON.stringify({prompt})
+  });
+  if (response.status===401) session=null;
+  if (!response.ok) await json(response);
+  if (response.headers.get('content-type')?.split(';')[0]!=='image/jpeg') throw Error('The image service did not return an image.');
+  const quota=response.headers.get('X-PixelAI-Remaining');
+  if (quota!==null) onEvent({type:'quota',value:Number(quota)});
+  return response.blob();
+}

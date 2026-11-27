@@ -3,6 +3,7 @@ const router = 'https://openrouter.ai/api/v1/chat/completions';
 
 export const models = {
   fast: {provider:'Groq', secret:'GROQ_API_KEY', endpoint:groq, model:'openai/gpt-oss-20b', label:'Fast', description:'GPT-OSS 20B with low reasoning effort.', options:{reasoning_effort:'low',include_reasoning:false}},
+  essay: {provider:'Groq', secret:'GROQ_API_KEY', endpoint:groq, model:'openai/gpt-oss-120b', label:'Cloud Writer', description:'Long essays and reports with an expanded response budget.', options:{reasoning_effort:'low',include_reasoning:false},maxOutput:6144},
   reasoning: {provider:'Groq', secret:'GROQ_API_KEY', endpoint:groq, model:'openai/gpt-oss-120b', label:'Reasoning', description:'GPT-OSS 120B with medium reasoning effort.', options:{reasoning_effort:'medium',include_reasoning:false}},
   code: {provider:'Groq', secret:'GROQ_API_KEY', endpoint:groq, model:'qwen/qwen3.8-27b', label:'Code', description:'Qwen 3.8 27B tuned for coding tasks.', options:{reasoning_format:'hidden',reasoning_effort:'low'}},
   creative: {provider:'Groq', secret:'GROQ_API_KEY', endpoint:groq, model:'qwen/qwen3.8-27b', label:'Creative', description:'Qwen 3.8 27B with increased sampling variety.', options:{temperature:0.95,reasoning_format:'hidden'}},
@@ -11,7 +12,7 @@ export const models = {
 
 export function candidates(mode, text, env) {
   if (mode !== 'auto') return env[models[mode]?.secret] ? [models[mode]] : [];
-  const first = /\b(debug|javascript|code|html|css|programming)\b/i.test(text) ? 'code'
+  const first = /\b(essay|long-form|article|report|write-up)\b/i.test(text) ? 'essay' : /\b(debug|javascript|code|html|css|programming)\b/i.test(text) ? 'code'
     : /\b(prove|reason|analyse|analyze|equation|step by step)\b/i.test(text) ? 'reasoning'
     : /\b(story|poem|lyrics|creative|brainstorm)\b/i.test(text) ? 'creative' : 'fast';
   return [...new Set([first,'fast','reasoning','free'].map(key=>models[key]))].filter(model=>env[model.secret]);
@@ -28,7 +29,7 @@ export async function openStream(model, messages, env, signal, fetcher) {
     },
     body:JSON.stringify({
       model:model.model, messages, stream:true,
-      [model.provider==='Groq'?'max_completion_tokens':'max_tokens']:1536,
+      [model.provider==='Groq'?'max_completion_tokens':'max_tokens']:model.maxOutput||4096,
       ...model.options
     })
   });

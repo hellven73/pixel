@@ -82,10 +82,10 @@
             <form class="composer" id="composer">
               <div id="attachment-chip" class="attachment-chip" hidden><span></span><button type="button" id="remove-file" aria-label="Remove attachment">×</button></div>
               <label class="sr-only" for="prompt">Message PixelAI</label>
-              <textarea id="prompt" rows="1" maxlength="3200" placeholder="Message PixelAI…"></textarea>
+              <textarea id="prompt" rows="1" maxlength="12000" placeholder="Message PixelAI…"></textarea>
               <div class="compose-actions">
-                <details class="attach-menu" id="attach-menu"><summary class="icon-button" aria-label="Attachment options" title="Attachment options"><svg><use href="#i-plus"/></svg></summary><div><button type="button" id="attach">Attach text or PDF</button></div></details>
-                <input id="file" type="file" accept=".txt,.md,.json,.csv,.js,.css,.html,.pdf,text/plain,application/pdf" hidden>
+                <details class="attach-menu" id="attach-menu"><summary class="icon-button" aria-label="Attachment options" title="Attachment options"><svg><use href="#i-plus"/></svg></summary><div><button type="button" id="attach">Attach image, text or PDF</button></div></details>
+                <input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,.txt,.md,.json,.csv,.js,.css,.html,.pdf,text/plain,application/pdf" hidden>
                 <button type="button" class="persona-button" id="persona-button" title="Select a persona"><svg><use href="#i-spark"/></svg><span id="persona-name">Assistant</span></button>
                 <span class="compose-spacer"></span>
                 <button type="button" class="icon-button" id="voice" aria-label="Dictate a message" title="Voice input" hidden><svg><use href="#i-mic"/></svg></button>

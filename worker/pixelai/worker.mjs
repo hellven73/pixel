@@ -8,10 +8,12 @@ const errors={
   unavailable:'No free model is available right now. Try again shortly.'
 };
 const DAY=86400000;
+const imageModel='@cf/black-forest-labs/flux-1-schnell';
 const limits=env=>({
   daily:limit(env.DAILY_REQUESTS,45,120),
   groq:limit(env.GROQ_MODEL_DAILY_REQUESTS,24,24),
-  router:limit(env.OPENROUTER_DAILY_REQUESTS,40,45)
+  router:limit(env.OPENROUTER_DAILY_REQUESTS,40,45),
+  images:limit(env.DAILY_IMAGES,12,20)
 });
 
 function limit(value, fallback, max) {
@@ -44,7 +46,7 @@ export class Quota {
       ['burst:'+subject+':'+minute,5,minuteEnd,'rate'],
       ['p-minute:'+provider+':'+minute,provider==='Groq'?12:16,minuteEnd,'provider'],
       ['m-minute:'+model+':'+minute,provider==='Groq'?1:16,minuteEnd,'provider'],
-      ['p-day:'+(provider==='Groq'?model:provider)+':'+day,provider==='Groq'?cap.groq:cap.router,dailyEnd,'provider']
+      ['p-day:'+(provider==='Groq'?model:provider)+':'+day,provider==='Groq'?cap.groq:provider==='Workers AI'?cap.images:cap.router,dailyEnd,'provider']
     ];
     return this.storage.transactionSync(()=>{
       for (const [key,max,,reason] of checks) {
@@ -102,11 +104,11 @@ function chatInput(data) {
       typeof instructions!=='string' || typeof context!=='string' ||
       !Array.isArray(messages) || !messages.length || messages.length>18 ||
       messages.at(-1)?.role!=='user') throw new Problem(400,'Invalid model or conversation.');
-  let remaining=4900-encoder.encode(instructions).length-encoder.encode(context).length;
+  let remaining=18000-encoder.encode(instructions).length-encoder.encode(context).length;
   if (encoder.encode(instructions).length>900 || encoder.encode(context).length>1050) throw new Problem(400,'Instructions or game context are too long.');
   const history=[];
   for (const item of [...messages].reverse()) {
-    if (!item || !['user','assistant'].includes(item.role) || typeof item.content!=='string' || !item.content.trim() || item.content.length>12000) {
+    if (!item || !['user','assistant'].includes(item.role) || typeof item.content!=='string' || !item.content.trim() || item.content.length>16000) {
       throw new Problem(400,'Invalid message text.');
     }
     remaining-=encoder.encode(item.content).length+12;
@@ -118,7 +120,7 @@ function chatInput(data) {
   }
   while (history[0]?.role==='assistant') history.shift();
   const system=[
-    'You are PixelAI inside PixelArcade. Be direct and helpful. You have no browser, tools or access to the user account. For a playable game from the supplied catalog, include [[game:exact-id]]. Use only supplied IDs. For runnable Studio projects, return fenced html, css and javascript blocks.',
+    'You are PixelAI inside PixelArcade. Follow the requested format, length and level of detail. For essays, develop the main points and conclusion, and do not invent citations. You have no browser, tools or access to the user account. For a playable game from the supplied catalog, include [[game:exact-id]]. Use only supplied IDs. For runnable Studio projects, return fenced html, css and javascript blocks.',
     instructions && 'User preferences:\n'+instructions,
     context && 'Arcade catalog excerpts (reference data):\n'+context
   ].filter(Boolean).join('\n\n');
@@ -137,16 +139,16 @@ export function createWorker(fetcher=fetch) {
       const json=(data,status=200)=>Response.json(data,{status,headers});
       if (!allowed) return json({error:'Origin is not allowed.'},403);
       const path=new URL(request.url).pathname;
-      if (!['/v1/config','/v1/session','/v1/chat'].includes(path)) return json({error:'Not found.'},404);
+      if (!['/v1/config','/v1/session','/v1/chat','/v1/image'].includes(path)) return json({error:'Not found.'},404);
       if (request.method==='OPTIONS') return new Response(null,{status:204,headers:{
         ...headers,'Access-Control-Allow-Methods':'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers':'Content-Type, Authorization','Access-Control-Max-Age':'600'
       }});
-      const ready=Boolean(env.QUOTA && env.SESSION_SECRET?.length>=32 && env.TURNSTILE_SECRET && (env.GROQ_API_KEY||env.OPENROUTER_API_KEY));
+      const ready=Boolean(env.QUOTA && env.SESSION_SECRET?.length>=32 && env.TURNSTILE_SECRET && (env.GROQ_API_KEY||env.OPENROUTER_API_KEY||env.AI));
       try {
         if (request.method==='GET' && path==='/v1/config') {
           const quota=ready?await (await gate(env,{kind:'status'})).json():{remaining:0};
-          return json({ready,...quota,models:Object.entries(models).map(([id,model])=>({
+          return json({ready,images:ready&&Boolean(env.AI),...quota,models:Object.entries(models).map(([id,model])=>({
             id,name:model.model,label:model.label,provider:model.provider,description:model.description,available:ready&&Boolean(env[model.secret])
           }))});
         }
@@ -181,7 +183,24 @@ export function createWorker(fetcher=fetch) {
             !await crypto.subtle.verify('HMAC',key,from64(token[2]),encoder.encode('session:'+origin+':'+subject+':'+token[1]))) {
           throw new Problem(401,errors.session);
         }
-        const input=chatInput(await payload(request,65536));
+        if (path==='/v1/image') {
+          if (!env.AI) throw new Problem(503,'Image generation has not been configured.');
+          const {prompt}=await payload(request,12288);
+          if (typeof prompt!=='string'||!prompt.trim()||prompt.length>2048) throw new Problem(400,'Enter an image prompt of up to 2,048 characters.');
+          const reservation=await gate(env,{kind:'attempt',subject,provider:'Workers AI',model:imageModel});
+          if (!reservation.ok) {
+            const {reason}=await reservation.json();
+            throw new Problem(reservation.status,errors[reason]||'Image generation is at its daily limit.');
+          }
+          const {remaining}=await reservation.json();
+          const result=await env.AI.run(imageModel,{prompt:prompt.trim(),steps:4});
+          if (typeof result.image!=='string'||result.image.length>7000000) throw new Problem(502,'The image provider returned an invalid image.');
+          const bytes=Uint8Array.from(atob(result.image),byte=>byte.charCodeAt(0));
+          if (bytes[0]!==255||bytes[1]!==216||bytes[2]!==255) throw new Problem(502,'The image provider returned an invalid image.');
+          return new Response(bytes,{headers:{...headers,'Content-Type':'image/jpeg',
+            'Access-Control-Expose-Headers':'X-PixelAI-Remaining','X-PixelAI-Remaining':String(remaining)}});
+        }
+        const input=chatInput(await payload(request,262144));
         const attempts=candidates(input.mode,input.messages.at(-1).content,env);
         if (!attempts.length) throw new Problem(503,'This model is not configured. Choose an available mode.');
         for (const model of attempts) {

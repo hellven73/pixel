@@ -1,7 +1,9 @@
 import {asMarkdown,builtIn,contextFor,download,gameContext,load,newChat,newMessage,save} from './state.js';
-import {configuration,generate} from './transport.js';
-import {canUseLocalModel,generateLocal,localModel,removeLocalModel} from './local-model.js';
+import {configuration,createImage,generate} from './transport.js';
+import {canUseLocalModel,generateLocal,removeLocalModel} from './local-model.js';
 import {codeFrom,createStudio} from './studio.js';
+import {localModels} from './local-models.js';
+import {imageAttachment,readImage,showImage,storeImage} from './images.js';
 
 const $=id=>document.getElementById(id);
 const shell=$('shell'), sidebar=$('sidebar'), workspace=$('workspace'), prompt=$('prompt'), output=$('messages'), scroll=$('scroll');
@@ -10,7 +12,7 @@ const mobile=matchMedia('(max-width:760px)');
 const reduced=matchMedia('(prefers-reduced-motion: reduce)');
 const state=load();
 const localAvailable=canUseLocalModel();
-const usingLocal=()=>state.settings.model===localModel.id;
+const usingLocal=()=>Object.hasOwn(localModels,state.settings.model);
 let chat=state.chats[0]||newChat(false);
 let service={ready:false,remaining:0,models:[]};
 let games=[];
@@ -51,7 +53,7 @@ function applySettings() {
   updateModelLabel();
 }
 function updateModelLabel() {
-  $('model-label').textContent=usingLocal()?localModel.label:service.models.find(model=>model.id===state.settings.model)?.label||'Auto';
+  $('model-label').textContent=usingLocal()?localModels[state.settings.model].label:service.models.find(model=>model.id===state.settings.model)?.label||(state.settings.model==='image'?'Image Generator':'Auto');
   $('privacy-note').textContent=usingLocal()?'On-device chat keeps prompts and attachments in this browser.':'Chats stay in this browser. Prompts go to the selected AI provider.';
 }
 function loadRich() {
@@ -129,7 +131,7 @@ function resizePrompt() {
   prompt.style.height=Math.min(prompt.scrollHeight,112)+'px';
 }
 function fill(value) {prompt.value=value;resizePrompt();prompt.focus();}
-function canSend() {return usingLocal()?localAvailable:service.ready&&service.remaining>0;}
+function canSend() {return usingLocal()?localAvailable:service.ready&&service.remaining>0&&(state.settings.model==='image'?service.images:service.models.some(model=>model.available));}
 function syncControls() {
   $('stop').hidden=!run;
   $('send').hidden=Boolean(run);
@@ -170,7 +172,7 @@ function renderAnswer(target,text) {
   if (clean) void loadRich().then(rich=>{
     if (!target.isConnected) return;
     target.classList.remove('plain');
-    rich.markdown(target,clean,copy);
+    rich.markdown(target,clean,copy,(language,source)=>toggleStudio(true,{[language]:source},true));
     selectedGameCards(target,text);
     if (preserveBottom) bottom();
   }).catch(()=>selectedGameCards(target,text));
@@ -184,10 +186,23 @@ function row(message) {
   heading.append(element('span',isUser?'You':message.model?'PixelAI · '+message.model:'PixelAI'));
   const body=element('div',message.text,{class:'message-body plain'});
   if (isUser && message.file) body.append(element('div','Attachment · '+message.file.name,{class:'attachment-chip'}));
-  if (!isUser && !message.streaming) renderAnswer(body,message.text);
+  const imageId=message.image||message.file?.image;
+  if (!isUser && !message.streaming && !imageId) renderAnswer(body,message.text);
+  if (imageId) {
+    const image=element('img',null,{class:'chat-image',alt:isUser?message.file.name:'Generated image'});
+    body.append(image);
+    void showImage(image,imageId).catch(()=>{});
+  }
   const actions=element('div',null,{class:'message-actions'});
-  if (isUser) actions.append(button('Edit & branch',()=>editMessage(message)));
-  else if (!message.streaming) {
+  if (isUser) actions.append(button('Copy',()=>copy(message.text)),button('Edit & branch',()=>editMessage(message)));
+  if (!isUser&&message.image) actions.append(button('Download image',async()=>{
+    try {
+      const blob=await readImage(message.image);
+      if (!blob) throw Error('Image is no longer available.');
+      download(blob,blob.type==='image/svg+xml'?'pixelai.svg':'pixelai.jpg',blob.type);
+    } catch (error) {notify(error.message,true);}
+  }));
+  if (!isUser&&!message.streaming) {
     if (message.text) {
       actions.append(button('Copy',()=>copy(message.text)));
       if ('speechSynthesis' in window) actions.append(button('Read aloud',()=>{
@@ -199,6 +214,7 @@ function row(message) {
       if (Object.keys(project).length) actions.append(button('Open in Studio',()=>toggleStudio(true,project)));
     }
     actions.append(button('Regenerate',()=>regenerate(message)));
+    if (message.truncated&&chat.messages.at(-1)===message) actions.append(button('Continue writing',()=>void send('Continue exactly where the previous reply ended. Do not repeat any text.')));
     if (message.text) actions.append(button(message.feedback?'Feedback: '+message.feedback:'Feedback',()=>feedback(message)));
   }
   article.append(heading,body,actions);
@@ -285,7 +301,7 @@ function confirmAction(title,action) {
 }
 function editMessage(message) {
   if (run) return notify('Stop the current reply before branching.');
-  const edit=textarea(message.text,3200);
+  const edit=textarea(message.text,12000);
   const source=chat;
   const fields=form(()=>{
     if (!edit.value.trim()) return;
@@ -298,7 +314,7 @@ function editMessage(message) {
 function branch(source,index,text,file) {
   if (source.messages[index]?.onDevice) {
     if (!localAvailable) return notify('This on-device message can only be retried in a compatible browser.',true);
-    state.settings.model=localModel.id;
+    state.settings.model=source.messages[index]?.mode||'local';
     changeSettings();
     syncControls();
   }
@@ -346,12 +362,13 @@ function settings() {
     if (run) {run.discard=true;run.controller.abort();}
     state.chats=[];persist();createChat();
   })));
-  if (state.settings.localAllowed) {
+  if (state.settings.localAllowed||Object.keys(state.settings.localDownloads||{}).length) {
     const clearModel=button('Remove downloaded model',async()=>{
       clearModel.disabled=true;
       try {
         await removeLocalModel();
         state.settings.localAllowed=false;
+        state.settings.localDownloads={};
         changeSettings();
         clearModel.remove();
         fields.append(element('p','On-device model removed. Next use needs a new download.',{role:'status'}));
@@ -447,8 +464,8 @@ async function configure() {
   let connectionFailed=false;
   try {service=await configuration(AbortSignal.timeout(10000));}
   catch {connectionFailed=true;}
-  if (!service.ready && state.settings.model==='auto' && localAvailable) state.settings.model=localModel.id;
-  if (service.ready && !usingLocal() && !service.models.some(model=>model.id===state.settings.model&&model.available)) {
+  if ((!service.ready||!service.models.some(model=>model.available)) && state.settings.model==='auto' && localAvailable) state.settings.model='local';
+  if (service.ready && !(state.settings.model==='image'&&service.images) && !usingLocal() && !service.models.some(model=>model.id===state.settings.model&&model.available)) {
     state.settings.model='auto';
   }
   if (usingLocal()) {
@@ -457,13 +474,13 @@ async function configure() {
   else if (!service.ready) notify('Cloud chat setup is pending. Local tools and saved chats are available.');
   applySettings();syncControls();
 }
-function confirmModelDownload(text) {
+function confirmModelDownload(text,mode) {
   const content=element('div',null,{class:'dialog-actions'});
   content.append(
-    element('p','First use downloads about 285 MB with compatible WebGPU or 400 MB in CPU mode. Once the model loads, prompts and attachments are processed on this device.'),
+    element('p',localModels[mode].description+' This model runs in your browser.'),
     element('p','Your browser can cache the weights for later visits. Remove them from PixelAI Settings or clear this site’s data.'),
     button('Download model and send',()=>{
-      state.settings.localAllowed=true;
+      state.settings.localDownloads={...state.settings.localDownloads,[localModels[mode].repository]:true};
       persist();
       dialog.close();
       void send(text);
@@ -483,14 +500,22 @@ function liveUpdate(job) {
   });
 }
 async function send(text) {
-  if (run||!canSend()||!text.trim()) return;
+  const mode=state.settings.model;
   const local=usingLocal();
-  if (local&&!state.settings.localAllowed) return confirmModelDownload(text);
-  const user={...newMessage('user',text),onDevice:local,...(attachment?{file:attachment}:{})};
-  const answer={...newMessage('assistant',''),onDevice:local,streaming:true};
+  if (run||!canSend()||(!text.trim()&&!attachment?.image)) return;
+  if (!text.trim()) text='Describe this image.';
+  const imageId=mode==='vision'?(attachment?.image||chat.messages.findLast(item=>item.onDevice&&item.file?.image)?.file.image):null;
+  if (mode==='vision'&&!imageId) return notify('Attach an image to use Vision.',true);
+  if (attachment?.image&&mode!=='vision') return notify('Select Vision to read the attached image.',true);
+  if (mode==='image'&&text.length>2048) return notify('Image prompts can be up to 2,048 characters.',true);
+  if (local&&!state.settings.localDownloads?.[localModels[mode].repository]&&!(mode==='local'&&state.settings.localAllowed)) {
+    return confirmModelDownload(text,mode);
+  }
+  const user={...newMessage('user',text),onDevice:local,mode,...(attachment?{file:attachment}:{})};
+  const answer={...newMessage('assistant',''),onDevice:local,mode,streaming:true};
   const target=chat;
-  const payload=request(state.settings.model,contextFor(target,user),text);
-  if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>4750) {
+  const payload=request(mode,contextFor(target,user),text);
+  if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>17000) {
     return notify('This message is too long. Shorten the prompt or attachment.',true);
   }
   attachment=undefined;updateAttachment();fill('');
@@ -508,12 +533,15 @@ async function send(text) {
   try {
     await library;
     payload.context=gameContext(games,text);
-    if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>4750) {
+    if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>17000) {
       throw Error('This message is too long. Shorten the prompt or attachment.');
     }
     const signal=AbortSignal.any([job.controller.signal,AbortSignal.timeout(local?900000:125000)]);
-    const reply=local?generateLocal:generate;
-    await reply(payload,{signal,announce:notify,onEvent:event=>{
+    if (imageId) {
+      payload.image=await readImage(imageId);
+      if (!payload.image) throw Error('Attach the image again to continue.');
+    }
+    const options={signal,announce:notify,onEvent:event=>{
       if (event.type==='quota') quota(event.value);
       if (event.type==='model') {answer.model=event.model;answer.provider=event.provider;}
       if (event.type==='text') {
@@ -522,8 +550,27 @@ async function send(text) {
         if (first) {shell.dataset.state='responding';notify('Replying…');}
         liveUpdate(job);
       }
-      if (event.type==='done') notify(event.truncated?'The reply reached the model’s output limit.':'');
-    }});
+      if (event.type==='done') {
+        answer.truncated=event.truncated;
+        notify(event.truncated?'You can continue this reply below.':'');
+      }
+    }};
+    if (mode==='image') {
+      const image=await createImage(text,options);
+      signal.throwIfAborted();
+      answer.image=await storeImage(image,target.temporary);
+      answer.model='FLUX.1 Schnell';
+      notify();
+    } else {
+      const reply=local?generateLocal:generate;
+      await reply(payload,options);
+      if (mode==='illustration') {
+        answer.image=await storeImage((await loadRich()).illustration(answer.text),target.temporary);
+        answer.text='';
+        answer.truncated=false;
+        notify();
+      }
+    }
   } catch (error) {
     if (!answer.text) answer.failed=true;
     notify(job.controller.signal.aborted?'Reply stopped.':error.name==='TimeoutError'?'The reply timed out. Try again.':error.message,!job.controller.signal.aborted);
@@ -545,6 +592,13 @@ function updateAttachment() {
 async function attach(file) {
   if (!file) return;
   try {
+    if (file.type.startsWith('image/')) {
+      if (!localAvailable) throw Error('This browser does not support on-device vision.');
+      attachment=await imageAttachment(file,chat.temporary);
+      state.settings.model='vision';
+      changeSettings();syncControls();updateAttachment();notify();prompt.focus();
+      return;
+    }
     let text;
     if (/\.pdf$/i.test(file.name)) {
       if (file.size>3000000) throw Error('Choose a PDF under 3 MB.');
@@ -571,11 +625,12 @@ async function attach(file) {
     updateAttachment();notify(text.length>1750?'Attached the first 1,750 characters.':'');prompt.focus();
   } catch (error) {notify(error.message,true);}
 }
-function toggleStudio(open=$('studio').hidden,project) {
+function toggleStudio(open=$('studio').hidden,project,runPreview=false) {
   if (open) {
     studio??=createStudio($('studio'),{loadRich,notify});
     if ($('studio').hidden) studio.open();
     if (project) studio.load(project);
+    if (runPreview) studio.run();
   } else studio?.close();
   $('studio').hidden=!open;
   $('studio-button').setAttribute('aria-pressed',String(open));
@@ -672,8 +727,9 @@ $('model-button').onclick=()=>{
   $('model-button').setAttribute('aria-expanded',String(open));
   if (!open) return;
   const choices=[
-    {id:'auto',label:'Auto',available:service.ready,description:'Routes cloud requests to an appropriate configured free model.'},
-    {...localModel,available:localAvailable},
+    {id:'auto',label:'Auto',available:service.models.some(model=>model.available),description:'Routes cloud requests to an appropriate configured free model.'},
+    ...Object.entries(localModels).map(([id,model])=>({...model,id,available:localAvailable})),
+    {id:'image',name:'FLUX.1 Schnell',label:'Image Generator',description:'Create a raster image through the cloud.',available:Boolean(service.images)},
     ...service.models
   ];
   list.replaceChildren(...choices.map(model=>{

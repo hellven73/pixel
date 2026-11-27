@@ -11,6 +11,7 @@
     "test:browser": "node test/pixelai-browser.mjs"
   },
   "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.4.2",
     "@huggingface/transformers": "4.3.2",
     "dompurify": "3.5.0",
     "esbuild": "0.28.2",

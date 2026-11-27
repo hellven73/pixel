@@ -4,9 +4,13 @@ compatibility_date = "2026-11-20"
 workers_dev = true
 preview_urls = false
 
+[ai]
+binding = "AI"
+
 [vars]
 ALLOWED_ORIGINS = "https://pixelarcade.com.au,https://hellven73.github.io"
 DAILY_REQUESTS = "45"
+DAILY_IMAGES = "12"
 GROQ_MODEL_DAILY_REQUESTS = "24"
 OPENROUTER_DAILY_REQUESTS = "40"
 

@@ -203,3 +203,14 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;bac
 .chat:has(.welcome:not([hidden])) .compose-wrap{width:min(100%,680px)}
 .suggestions b svg,.arcade-link span svg{width:13px;height:13px;color:var(--muted)}
 @media(max-height:650px){.chat:has(.welcome:not([hidden])){padding-bottom:0}}
+.message-body a:not(.game-card){color:#65adff;text-decoration:underline;text-underline-offset:3px}
+.message-body a:not(.game-card):hover{color:#9dcbff}
+.assistant .message-body,.arena-result .message-body{padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.user .message-body{border:1px solid var(--line)}
+.chat-image{display:block;max-width:min(100%,512px);max-height:480px;object-fit:contain;margin:8px 0;border-radius:8px}
+.message-body pre .code-actions{position:absolute;top:5px;right:6px;display:flex;gap:6px}
+.message-body pre .code-actions button{position:static}
+.studio-console{display:flex;min-height:0;flex:1;flex-direction:column;gap:8px}
+.studio-console label{display:grid;gap:4px}
+.studio-console textarea{width:100%;min-height:42px;padding:7px;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:7px}
+.studio-console pre{flex:1;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:8px;border:1px solid var(--line);border-radius:7px}

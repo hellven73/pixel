@@ -7,7 +7,7 @@ import {removedArcadeFile,updateArcadeHTML,updateCompactNav,updateGameLaunch,upd
 
 const source=new URL('./pixelai/',import.meta.url);
 const dependencies=new URL('./node_modules/',import.meta.url);
-const staticFiles=['index.html','style.css','mark.svg','app.js','state.js','config.js','transport.js','studio.js','local-cache.js','local-model.js','local-prompt.js','local-worker.js'];
+const staticFiles=['index.html','style.css','mark.svg','app.js','state.js','config.js','transport.js','studio.js','code-preview.js','local-models.js','images.js','local-cache.js','local-model.js','local-prompt.js','local-worker.js'];
 let sharedAssets;
 
 async function browserAssets() {
@@ -20,11 +20,14 @@ async function browserAssets() {
       'export const turnstileSiteKey = '+JSON.stringify(process.env.PIXELAI_SITE_KEY || turnstileSiteKey)+';'
     ].join('\n'));
   }
-  const {outputFiles}=await build({
-    entryPoints:[new URL('rich.js',source).pathname],
-    bundle:true, write:false, format:'esm', target:'es2022', minify:true
-  });
-  files.set('rich.js',outputFiles[0].contents);
+  for (const name of ['rich.js','code-worker.js']) {
+    const {outputFiles}=await build({
+      entryPoints:[new URL(name,source).pathname],
+      bundle:true,write:false,format:'esm',target:'es2022',minify:true,legalComments:'none'
+    });
+    files.set(name,outputFiles[0].contents);
+  }
+  files.set('licenses/browser-wasi-shim.txt',await readFile(new URL('@bjorn3/browser_wasi_shim/LICENSE-MIT',dependencies)));
   const transformer=new URL('@huggingface/transformers/',dependencies);
   const runtime=new URL('onnxruntime-web/dist/',dependencies);
   files.set('local-runtime/transformers.js',await readFile(new URL('dist/transformers.min.js',transformer)));

@@ -29,8 +29,8 @@ test('local prompt preserves preferences, suggestions and the latest message',()
 test('context trimming drops complete old turns and frees rejected tensors',()=>{
   const {tokenizer,calls}=mockTokenizer();
   const messages=[
-    {role:'user',content:'x'.repeat(1200)},
-    {role:'assistant',content:'y'.repeat(600)},
+    {role:'user',content:'x'.repeat(2400)},
+    {role:'assistant',content:'y'.repeat(1200)},
     {role:'user',content:'Keep this'},
   ];
   boundedInputs(tokenizer,{messages});
@@ -41,7 +41,7 @@ test('context trimming drops complete old turns and frees rejected tensors',()=>
 
 test('an over-limit latest message is rejected without silently truncating it',()=>{
   const {tokenizer,calls}=mockTokenizer();
-  assert.throws(()=>boundedInputs(tokenizer,{messages:[{role:'user',content:'x'.repeat(2000)}]}),/too long/);
+  assert.throws(()=>boundedInputs(tokenizer,{messages:[{role:'user',content:'x'.repeat(4000)}]}),/too long/);
   assert.equal(calls[0].disposed,true);
 });
 
