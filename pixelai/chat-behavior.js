@@ -2,6 +2,7 @@ export function chatSystemPrompt({mode,instructions,context}) {
   const core='You are PixelAI, a conversational AI chatbot. Reply naturally to casual messages and answer questions directly. Use earlier messages to understand follow-ups. Complete the requested work and include the requested changes when revising an answer. Give code in fenced blocks with language labels.';
   return [
     core,
+    mode==='advanced' && 'For a browser project, provide all required markup and code. Prefer one self-contained HTML file with inline styles and scripts unless separate files are requested. Include visible content on load and initialize scripts after the markup exists. When asked to fix an existing project, provide the corrected files. State what you can infer from the code or preview report and never claim you ran it yourself.',
     ['writer','essay'].includes(mode) && 'Write a complete draft with developed paragraphs. Follow the requested word count and do not invent citations.',
     mode==='illustration' && 'Draw the requested picture using SVG. Include a complete opening and closing svg element with viewBox="0 0 100 100". Use coloured shapes and put the background rectangle first. Return only the SVG. Never use external references.',
     instructions && 'User preferences:\n'+instructions,

@@ -35,7 +35,7 @@ async function loadRuntime() {
 }
 async function loadModel(mode) {
   if (!runtime) await loadRuntime();
-  const {repository,revision}=localModels[mode];
+  const {repository,revision,weightFiles}=localModels[mode];
   if (loadedRepository===repository) return;
   await model?.dispose();
   model=null;
@@ -53,20 +53,22 @@ async function loadModel(mode) {
   };
   const vision=mode==='vision';
   const dtype=localModels[mode][device];
-  if (localModels[mode].chunkedChat && runtime.env.customCache) {
-    const file='onnx/model_'+dtype+'.onnx_data';
+  const storage=runtime.env.customCache;
+  for (const name of (storage?weightFiles:undefined)||[]) {
+    const file='onnx/'+name+'_'+dtype+'.onnx_data';
     const url=new URL(repository+'/resolve/'+revision+'/'+file,runtime.env.remoteHost).href;
-    const storage=runtime.env.customCache;
     const cached=await storage.match(url);
     if (cached) await cached.body?.cancel();
     else {
       const response=await fetch(url,{credentials:'omit'});
       if (!response.ok || !response.body) throw Error('Could not download the on-device model.');
-      await storage.put(url,response,progress=>progress_callback({status:'progress',file,...progress}));
+      await storage.put(url,response,({loaded,total})=>{
+        if (total) status('Downloading '+name.replaceAll('_',' ')+' weights… '+Math.floor(100*loaded/total)+'%');
+      });
     }
-    status('Starting the on-device model…');
   }
-  const options={revision,device,dtype,...(!localModels[mode].chunkedChat&&{progress_callback})};
+  if (weightFiles) status('Starting the on-device model…');
+  const options={revision,device,dtype,...(!(storage&&weightFiles)&&{progress_callback})};
   if (vision) {
     processor=await runtime.AutoProcessor.from_pretrained(repository,{revision});
     processor.image_processor.size={longest_edge:device==='wasm'?512:1024};
@@ -98,7 +100,7 @@ self.addEventListener('message',async ({data})=>{
     }
     send({type:'ready',device});
     status(device==='webgpu'?'Generating with WebGPU…':'Generating on this device’s CPU…');
-    const responseLimit=data.mode==='vision'?384:data.mode==='writer'?4096:2048;
+    const responseLimit=data.mode==='vision'?384:['writer','advanced'].includes(data.mode)?4096:2048;
     if (data.mode==='vision') {
       const image=await runtime.RawImage.fromBlob(data.image);
       const question=data.messages.at(-1).content;
@@ -117,7 +119,7 @@ self.addEventListener('message',async ({data})=>{
     });
     const chatMode=localModels[data.mode].chunkedChat;
     if (chatMode) chatCache=await prefillChat(model,runtime,inputs,(done,total)=>status('Reading conversation… '+Math.round(done*100/total)+'%'));
-    const sampling=chatMode?{do_sample:true,temperature:0.1,top_k:50,repetition_penalty:1.1}:{do_sample:false};
+    const sampling=chatMode?{do_sample:true,temperature:0.1,top_k:50,repetition_penalty:1.1}:data.mode==='advanced'?{do_sample:false,repetition_penalty:1.08}:{do_sample:false};
     result=await model.generate({...inputs,max_new_tokens:responseLimit,streamer,...sampling,
       ...(chatCache?{past_key_values:chatCache}:{})});
     if (!answered) throw Error('The on-device model returned an empty reply. Try a shorter or more specific prompt.');

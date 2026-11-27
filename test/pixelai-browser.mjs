@@ -113,6 +113,15 @@ try {
   const downloaded=page.waitForEvent('download');
   await page.getByRole('button',{name:'Download ZIP'}).click();
   assert.equal((await downloaded).suggestedFilename(),'pixelai-project.zip');
+  await page.locator('#studio [data-mode=code]').click();
+  await page.locator('#studio-file').selectOption('javascript');
+  await page.getByRole('textbox',{name:'Edit project source'}).fill('throw Error("timer could not mount");');
+  await page.locator('#studio [data-mode=preview]').click();
+  await page.getByText(/Preview error:.*timer could not mount/).waitFor();
+  await page.getByRole('button',{name:'Ask PixelAI to fix'}).click();
+  await page.getByText('Studio project',{exact:true}).waitFor();
+  assert.match(await chat.inputValue(),/Fix this Studio project/);
+  assert.equal(seen.length,1);
   await page.reload();
   await page.getByRole('link',{name:/Hextris Play in Arcade/}).waitFor();
   await page.locator('#file').setInputFiles({
@@ -188,7 +197,13 @@ try {
   });
   const local=await device.newPage();
   await local.goto(origin+'/ai/');
-  await local.getByRole('button',{name:'On-device',exact:true}).waitFor();
+  await local.getByRole('button',{name:'On-device',exact:true}).click();
+  const localChoices=local.locator('#model-list');
+  assert.equal(await localChoices.getByRole('button',{name:/^On-device LFM/}).getAttribute('aria-pressed'),'true');
+  await localChoices.getByRole('button',{name:/^Advanced Qwen3.5/}).click();
+  assert.equal(await local.evaluate(()=>window.workerStarts),0);
+  await local.getByRole('button',{name:'Advanced',exact:true}).click();
+  await localChoices.getByRole('button',{name:/^On-device LFM/}).click();
   const localPrompt=local.getByRole('textbox',{name:'Message PixelAI'});
   await localPrompt.fill('Keep this on this device');
   await local.getByRole('button',{name:'Send message'}).click();
@@ -228,6 +243,6 @@ try {
     return Boolean(await (await modelStorage()).match(key));
   },modelUrl),false);
   await device.close();
-  assert.deepEqual(errors,[]);
+  assert.deepEqual(errors,['timer could not mount']);
   console.log('Browser checks passed: desktop and mobile, Pages navigation, gameplay, cloud and on-device chat, Markdown, code, math, local history, context, Arena, cancellation, Studio isolation and ZIP.');
 } finally {await browser.close();server.close();}

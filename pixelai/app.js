@@ -633,7 +633,12 @@ async function attach(file) {
 }
 function toggleStudio(open=$('studio').hidden,project,runPreview=false) {
   if (open) {
-    studio??=createStudio($('studio'),{loadRich,notify});
+    studio??=createStudio($('studio'),{loadRich,notify,attachProject:source=>{
+      attachment={name:'Studio project',text:source};
+      updateAttachment();
+      if (prompt.value.trim()) prompt.focus();
+      else fill('Fix this Studio project and return the corrected files.');
+    }});
     if ($('studio').hidden) studio.open();
     if (project) studio.load(project);
     if (runPreview) studio.run();
@@ -744,7 +749,9 @@ $('model-button').onclick=()=>{
       if (!run) notify(usingLocal()||service.ready?'':'Cloud chat setup is pending.');
     },{'aria-pressed':String(state.settings.model===model.id)});
     item.disabled=!model.available;
-    item.append(element('strong',model.label),element('small',(model.name?[model.provider,model.name].filter(Boolean).join(' · ')+' · ':'')+model.description+(!model.available?' Unavailable.':'')));
+    const label=element('strong',model.label);
+    if (state.settings.model===model.id) label.append(element('span','✓',{class:'model-check','aria-hidden':'true'}));
+    item.append(label,element('small',(model.name?[model.provider,model.name].filter(Boolean).join(' · ')+' · ':'')+model.description+(!model.available?' Unavailable.':'')));
     return item;
   }));
   list.querySelector('button:not(:disabled)')?.focus();

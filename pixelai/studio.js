@@ -17,15 +17,31 @@ export function codeFrom(text) {
   return files;
 }
 
-export function sandboxDocument(project) {
+function reportPreview(token) {
+  const send=(type,message)=>parent.postMessage({token,type,message},'*');
+  addEventListener('error',event=>{
+    if (event.message) send('error',event.message);
+  });
+  addEventListener('unhandledrejection',event=>send('error',String(event.reason)));
+  addEventListener('load',()=>{
+    const body=document.body;
+    const hasText=body?.getClientRects().length&&body.innerText.trim();
+    const hasControls=Array.from(body?.querySelectorAll('canvas,svg,img,video,button,input,select,textarea')||[])
+      .some(node=>node.getBoundingClientRect().width>0&&getComputedStyle(node).visibility==='visible');
+    send('ready',hasText||hasControls?'Preview loaded.':'The preview loaded without visible text, media or controls.');
+  });
+}
+
+export function sandboxDocument(project,token) {
   const policy="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'";
   const style=project.css.replace(/<\/style/gi,'<\\/style');
   const script=JSON.stringify(project.javascript).replaceAll('<','\\u003c');
-  return '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="'+policy+'"><style>'+style+'</style>'+project.html+
+  const reporter=token?'<script>('+reportPreview.toString()+')('+JSON.stringify(token)+');</script>':'';
+  return '<!doctype html><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="'+policy+'">'+reporter+'<style>'+style+'</style>'+project.html+
     '<script>(()=>{const script=document.createElement("script");script.textContent='+script+';document.body.append(script);})();</script>';
 }
 
-export function createStudio(container,{loadRich,notify}) {
+export function createStudio(container,{loadRich,notify,attachProject}) {
   container.innerHTML=`
     <header><h2>Creator Studio</h2><div class="studio-tools"><button data-mode="code">Code</button><button data-mode="preview">Preview</button><button id="studio-fullscreen">Fullscreen</button></div></header>
     <div class="studio-tools"><label>File <select id="studio-file"><option value="html">HTML</option><option value="css">CSS</option><option value="javascript">JavaScript</option><option value="python">Python</option><option value="cpp">C++</option></select></label><button id="studio-download-file">Download file</button><button id="studio-zip">Download ZIP</button></div>
@@ -33,7 +49,7 @@ export function createStudio(container,{loadRich,notify}) {
     <iframe title="Sandboxed project preview" sandbox="allow-scripts" referrerpolicy="no-referrer" hidden></iframe>
     <iframe class="code-isolate" title="Isolated code runtime" sandbox="allow-scripts" referrerpolicy="no-referrer" hidden></iframe>
     <div class="studio-console" hidden><label>Standard input<textarea placeholder="Optional input"></textarea></label><div class="studio-tools"><button id="studio-run">Run</button><button id="studio-stop">Stop</button></div><pre aria-label="Program output" role="log" tabindex="0"></pre></div>
-    <span class="studio-project">Preview runs in an isolated frame.</span>`;
+    <div class="studio-tools"><span class="studio-project" role="status"></span><button id="studio-debug" type="button">Ask PixelAI to fix</button></div>`;
 
   const get=selector=>container.querySelector(selector);
   const select=get('#studio-file');
@@ -47,6 +63,23 @@ export function createStudio(container,{loadRich,notify}) {
   let view='code';
   let files={...defaults};
   let timer;
+  let previewToken;
+  let previewIssue='';
+  const previewStatus=get('.studio-project');
+  window.addEventListener('message',event=>{
+    if (event.source!==frame.contentWindow || !previewToken || event.data?.token!==previewToken) return;
+    const {type,message}=event.data;
+    if (typeof message!=='string') return;
+    if (type==='error'&&!previewIssue) previewIssue='Preview error: '+message.slice(0,240);
+    if (type==='ready'||type==='error') previewStatus.textContent=previewIssue||message.slice(0,240);
+  });
+  get('#studio-debug').onclick=()=>{
+    const sections=Object.entries(files).filter(([,source])=>source?.trim());
+    const limit=Math.floor(3900/Math.max(sections.length,1));
+    const source=sections.map(([language,value])=>names[language]+'\n'+value.slice(0,limit)+(value.length>limit?'\n[File excerpt]':''));
+    const report=executable()?'Program output: '+result.textContent.slice(0,700):previewStatus.textContent;
+    attachProject([report,...source].filter(Boolean).join('\n\n'));
+  };
   const refresh=async()=>{
     const preview=get('code');
     const language=select.value;
@@ -63,7 +96,10 @@ export function createStudio(container,{loadRich,notify}) {
     consolePanel.hidden=value!=='preview'||!executable();
     frame.hidden=value!=='preview'||executable();
     for (const button of container.querySelectorAll('[data-mode]')) button.setAttribute('aria-pressed',String(button.dataset.mode===value));
-    if (!frame.hidden) frame.srcdoc=sandboxDocument(files);
+    previewIssue='';
+    previewToken=frame.hidden?null:crypto.randomUUID();
+    previewStatus.textContent=frame.hidden?'Preview runs in an isolated frame.':'Loading browser preview…';
+    if (previewToken) frame.srcdoc=sandboxDocument(files,previewToken);
     else frame.removeAttribute('srcdoc');
     if (!consolePanel.hidden) {
       result.textContent='Press Run to preview this program.';
@@ -106,7 +142,7 @@ export function createStudio(container,{loadRich,notify}) {
       select.onchange();
       mode('code');
     },
-    close(){runner.stop();frame.removeAttribute('srcdoc');},
+    close(){runner.stop();previewToken=null;frame.removeAttribute('srcdoc');},
     run(){mode('preview',true);},
     load(project){
       files={html:'',css:'',javascript:'',...project};

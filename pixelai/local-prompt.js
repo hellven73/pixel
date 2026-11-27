@@ -4,9 +4,9 @@ const promptLimit=3072;
 
 export function boundedInputs(tokenizer,{mode,messages,instructions,context}) {
   const system=chatSystemPrompt({mode,instructions,context});
-  const limit=['local','writer','illustration'].includes(mode)?8192:promptLimit;
+  const limit=['local','advanced','writer','illustration'].includes(mode)?8192:promptLimit;
   const recent=messages.slice(-9);
-  const history=mode==='illustration'?recent:focusLocalRequest(recent);
+  const history=['advanced','illustration'].includes(mode)?recent:focusLocalRequest(recent);
   for (;;) {
     while (history[0]?.role==='assistant') history.shift();
     const inputs=tokenizer.apply_chat_template([{role:'system',content:system},...history],{
