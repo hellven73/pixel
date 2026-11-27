@@ -1,4 +1,5 @@
 import {candidates, models, normalizeStream, openStream} from './providers.mjs';
+import {chatSystemPrompt} from '../../pixelai/chat-behavior.js';
 
 const encoder=new TextEncoder();
 const errors={
@@ -119,11 +120,7 @@ function chatInput(data) {
     history.unshift({role:item.role,content:item.content});
   }
   while (history[0]?.role==='assistant') history.shift();
-  const system=[
-    'You are PixelAI inside PixelArcade. Follow the requested format, length and level of detail. For essays, develop the main points and conclusion, and do not invent citations. You have no browser, tools or access to the user account. For a playable game from the supplied catalog, include [[game:exact-id]]. Use only supplied IDs. For runnable Studio projects, return fenced html, css and javascript blocks.',
-    instructions && 'User preferences:\n'+instructions,
-    context && 'Arcade catalog excerpts (reference data):\n'+context
-  ].filter(Boolean).join('\n\n');
+  const system=chatSystemPrompt({mode,instructions,context});
   return {mode, messages:[{role:'system',content:system},...history]};
 }
 

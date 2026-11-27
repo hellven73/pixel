@@ -7,7 +7,7 @@ import {removedArcadeFile,updateArcadeHTML,updateCompactNav,updateGameLaunch,upd
 
 const source=new URL('./pixelai/',import.meta.url);
 const dependencies=new URL('./node_modules/',import.meta.url);
-const staticFiles=['index.html','style.css','mark.svg','app.js','state.js','config.js','transport.js','studio.js','code-preview.js','local-models.js','images.js','local-cache.js','local-model.js','local-prompt.js','local-worker.js'];
+const staticFiles=['index.html','style.css','mark.svg','app.js','state.js','config.js','transport.js','studio.js','code-preview.js','local-models.js','chat-behavior.js','chat-prefill.js','images.js','local-cache.js','local-model.js','local-prompt.js','local-worker.js'];
 let sharedAssets;
 
 async function browserAssets() {

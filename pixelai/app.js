@@ -3,6 +3,7 @@ import {configuration,createImage,generate} from './transport.js';
 import {canUseLocalModel,generateLocal,removeLocalModel} from './local-model.js';
 import {codeFrom,createStudio} from './studio.js';
 import {localModels} from './local-models.js';
+import {relevantGameQuery} from './chat-behavior.js';
 import {imageAttachment,readImage,showImage,storeImage} from './images.js';
 
 const $=id=>document.getElementById(id);
@@ -131,7 +132,10 @@ function resizePrompt() {
   prompt.style.height=Math.min(prompt.scrollHeight,112)+'px';
 }
 function fill(value) {prompt.value=value;resizePrompt();prompt.focus();}
-function canSend() {return usingLocal()?localAvailable:service.ready&&service.remaining>0&&(state.settings.model==='image'?service.images:service.models.some(model=>model.available));}
+function canSend(mode=state.settings.model) {
+  return Object.hasOwn(localModels,mode)?localAvailable:!!(service.ready&&service.remaining>0&&
+    (mode==='image'?service.images:service.models.some(model=>model.available&&(mode==='auto'||model.id===mode))));
+}
 function syncControls() {
   $('stop').hidden=!run;
   $('send').hidden=Boolean(run);
@@ -214,7 +218,7 @@ function row(message) {
       if (Object.keys(project).length) actions.append(button('Open in Studio',()=>toggleStudio(true,project)));
     }
     actions.append(button('Regenerate',()=>regenerate(message)));
-    if (message.truncated&&chat.messages.at(-1)===message) actions.append(button('Continue writing',()=>void send('Continue exactly where the previous reply ended. Do not repeat any text.')));
+    if (message.truncated&&chat.messages.at(-1)===message) actions.append(button('Continue writing',()=>void send('Continue exactly where the previous reply ended. Do not repeat any text.',message.mode)));
     if (message.text) actions.append(button(message.feedback?'Feedback: '+message.feedback:'Feedback',()=>feedback(message)));
   }
   article.append(heading,body,actions);
@@ -454,7 +458,8 @@ function instructions() {
   return [persona?.instructions,state.settings.instructions,state.settings.remember?state.settings.memory:''].filter(Boolean).join('\n');
 }
 function request(mode,messages,query) {
-  return {mode,messages,instructions:instructions(),context:gameContext(games,query)};
+  const gameQuery=relevantGameQuery(games,query,messages);
+  return {mode,messages,instructions:instructions(),context:gameQuery?gameContext(games,gameQuery):''};
 }
 function quota(value,conservative=false) {
   if (Number.isFinite(value)) service.remaining=conservative?Math.min(service.remaining,value):value;
@@ -483,7 +488,7 @@ function confirmModelDownload(text,mode) {
       state.settings.localDownloads={...state.settings.localDownloads,[localModels[mode].repository]:true};
       persist();
       dialog.close();
-      void send(text);
+      void send(text,mode);
     }),
     button('Cancel',()=>dialog.close())
   );
@@ -499,16 +504,15 @@ function liveUpdate(job) {
     if (follow) bottom();
   });
 }
-async function send(text) {
-  const mode=state.settings.model;
-  const local=usingLocal();
-  if (run||!canSend()||(!text.trim()&&!attachment?.image)) return;
+async function send(text,mode=state.settings.model) {
+  const local=Object.hasOwn(localModels,mode);
+  if (run||!canSend(mode)||(!text.trim()&&!attachment?.image)) return;
   if (!text.trim()) text='Describe this image.';
   const imageId=mode==='vision'?(attachment?.image||chat.messages.findLast(item=>item.onDevice&&item.file?.image)?.file.image):null;
   if (mode==='vision'&&!imageId) return notify('Attach an image to use Vision.',true);
   if (attachment?.image&&mode!=='vision') return notify('Select Vision to read the attached image.',true);
   if (mode==='image'&&text.length>2048) return notify('Image prompts can be up to 2,048 characters.',true);
-  if (local&&!state.settings.localDownloads?.[localModels[mode].repository]&&!(mode==='local'&&state.settings.localAllowed)) {
+  if (local&&!state.settings.localDownloads?.[localModels[mode].repository]&&!(mode==='lite'&&state.settings.localAllowed)) {
     return confirmModelDownload(text,mode);
   }
   const user={...newMessage('user',text),onDevice:local,mode,...(attachment?{file:attachment}:{})};
@@ -532,7 +536,8 @@ async function send(text) {
   render();
   try {
     await library;
-    payload.context=gameContext(games,text);
+    const gameQuery=relevantGameQuery(games,text,payload.messages);
+    payload.context=gameQuery?gameContext(games,gameQuery):'';
     if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>17000) {
       throw Error('This message is too long. Shorten the prompt or attachment.');
     }
@@ -564,6 +569,7 @@ async function send(text) {
     } else {
       const reply=local?generateLocal:generate;
       await reply(payload,options);
+      if (local) answer.text=answer.text.replace(/^(`{3,}(?:python|py|c\+\+|cpp|cxx))>[ \t]*$/gim,'$1');
       if (mode==='illustration') {
         answer.image=await storeImage((await loadRich()).illustration(answer.text),target.temporary);
         answer.text='';
@@ -778,8 +784,6 @@ if (Recognizer) {
   };
 }
 
-const hour=new Date().getHours();
-$('greeting').textContent=hour<6?'Up for one more round?':hour<12?'What shall we play today?':hour<18?'What are we playing today?':'What’s the game plan tonight?';
 for (const suggestion of document.querySelectorAll('[data-prompt]')) {
   suggestion.onclick=()=>fill(suggestion.dataset.prompt);
 }

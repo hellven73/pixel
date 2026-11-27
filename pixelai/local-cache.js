@@ -1,5 +1,5 @@
 const cacheName='pixelai-local-model-v1';
-const weightName=/\/onnx\/([a-z0-9_]+\.onnx)(?:\?|$)/;
+const weightName=/\/onnx\/([a-z0-9_]+\.onnx(?:_data(?:_\d+)?)?)(?:\?|$)/;
 const optional=promise=>promise.catch(()=>null);
 
 async function browserCache() {
@@ -32,12 +32,21 @@ export async function modelStorage() {
       }
       return cache?.match(key);
     },
-    async put(key,response) {
+    async put(key,response,onProgress) {
       const name=directory&&weightFile(key);
       if (name && response.body) {
         const handle=await directory.getFileHandle(name,{create:true});
         const stream=await handle.createWritable();
-        await response.body.pipeTo(stream);
+        const total=Number(response.headers.get('Content-Length'));
+        let loaded=0;
+        const progress=new TransformStream({
+          transform(chunk,controller) {
+            loaded+=chunk.byteLength;
+            onProgress?.({loaded,total,progress:total?loaded*100/total:0});
+            controller.enqueue(chunk);
+          }
+        });
+        await response.body.pipeThrough(progress).pipeTo(stream);
       } else if (cache) {
         await cache.put(key,response);
       }
