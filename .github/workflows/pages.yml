@@ -2,36 +2,68 @@ name: Deploy Pixel Arcade
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: hellven73/pixel-portal
           ref: 2a1374ef2434f238594d8b72079d6ef11c3a88b7
+          path: origin-pages
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
-      - name: Prepare website
+          cache-dependency-path: |
+            package-lock.json
+            origin-pages/package-lock.json
+      - name: Build upstream arcade
+        working-directory: origin-pages
         run: npm ci --ignore-scripts && npm run build:pages
-      - uses: actions/configure-pages@v5
+      - name: Build and test PixelAI
+        env:
+          PIXELAI_ENDPOINT: ${{ vars.PIXELAI_ENDPOINT }}
+          PIXELAI_SITE_KEY: ${{ vars.PIXELAI_SITE_KEY }}
+        run: |
+          npm ci --ignore-scripts
+          npm test
+          node pixelai-build.mjs origin-pages/github-pages-dist
+      - name: Test desktop and mobile browser flows
+        if: github.event_name == 'pull_request'
+        run: |
+          npx playwright install chromium --with-deps
+          node build-vercel.mjs
+          npm run test:browser
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
-          path: github-pages-dist
-      - name: Deploy
+          path: origin-pages/github-pages-dist
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/deploy-pages@v4
         id: deployment
-        uses: actions/deploy-pages@v4

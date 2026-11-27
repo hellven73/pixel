@@ -1,0 +1,25 @@
+name = "pixelai-custom-domain"
+main = "worker.mjs"
+compatibility_date = "2026-11-20"
+workers_dev = false
+preview_urls = false
+
+routes = [
+  { pattern = "pixelarcade.com.au/ai*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/index.html*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/arcade.html*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/tools.js*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/hub.js*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/compact-ui.js*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/integration.js*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/manual.html*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/ai-chat.*", zone_name = "pixelarcade.com.au" },
+  { pattern = "pixelarcade.com.au/arcade/ai-engine.js*", zone_name = "pixelarcade.com.au" }
+]
+
+[assets]
+directory = "../../pixelai-edge-dist"
+binding = "ASSETS"

@@ -1,3 +1,4 @@
+import {applyPixelAI} from './pixelai-build.mjs';
 import {readFile,writeFile,mkdir,rm,readdir} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -20,4 +21,5 @@ for(const item of await readdir(out,{recursive:true,withFileTypes:true})){
 await writeFile(join(out,'arcade','api-client.js'),"(()=>{async function request(path,options={}){if(!path.startsWith('/api/'))throw Error('Invalid service path.');const headers=new Headers(options.headers||{});headers.set('X-Pixel-Client','pixel-arcade');const response=await fetch('/arcade-api/'+path.slice(5),{...options,headers,credentials:'same-origin',signal:options.signal||AbortSignal.timeout(60000)});const data=await response.json();if(!response.ok)throw Object.assign(Error(data.error||'The account service is unavailable.'),{status:response.status});if(path==='/api/auth/logout'||data.signedOut)document.dispatchEvent(new CustomEvent('pixel-session-changed'));return data}window.pixelApi={request}})();");
 await writeFile(join(out,'ads.txt'),'google.com, pub-8632851454203675, DIRECT, f08c47fec0942fa0\n');
 await writeFile(join(out,'robots.txt'),'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /arcade-api/\nDisallow: /github-api/\n');
+await applyPixelAI(out);
 console.log('Static site prepared. Archive: '+createHash('sha256').update(bytes).digest('hex').slice(0,12));
