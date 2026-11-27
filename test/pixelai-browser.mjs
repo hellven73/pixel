@@ -243,6 +243,36 @@ try {
     return Boolean(await (await modelStorage()).match(key));
   },modelUrl),false);
   await device.close();
+  const lookupCalls=[];
+  await regular.route('https://en.wikipedia.org/w/api.php?*',route=>{
+    const query=new URL(route.request().url()).searchParams.get('gsrsearch');
+    lookupCalls.push(query);
+    const title=query==='Brawl Stars'?'Brawl Stars':'Echidna';
+    const extract=query==='Brawl Stars'?'Players choose characters called Brawlers.':'Echidnas are egg-laying mammals.';
+    return route.fulfill({json:{query:{pages:[{pageid:123,title,extract,index:1}]}},headers:{'Access-Control-Allow-Origin':'*'}});
+  });
+  const searchPage=await regular.newPage();
+  await searchPage.goto(origin+'/pixel/ai/');
+  await searchPage.getByRole('button',{name:'New chat'}).click();
+  const lookupPrompt=searchPage.getByRole('textbox',{name:'Message PixelAI'});
+  await lookupPrompt.fill('In Brawl there are no Mario or Sonic');
+  await searchPage.getByRole('button',{name:'Send message'}).click();
+  await searchPage.getByText('Sources (2)',{exact:true}).click();
+  await searchPage.getByRole('link',{name:'Brawl Stars · Wikipedia'}).waitFor();
+  assert.equal(await searchPage.getByRole('link',{name:'Brawl Stars · Supercell'}).getAttribute('href'),'https://supercell.com/brawlstars/en/');
+  const correction=await searchPage.locator('.message.assistant .message-body').last().innerText();
+  assert.match(correction,/Brawlers/);
+  assert.doesNotMatch(correction,/Mario|Sonic|Pac-Man/);
+  await lookupPrompt.fill('Which characters can I play?');
+  await searchPage.getByRole('button',{name:'Send message'}).click();
+  await searchPage.locator('.message.assistant').nth(1).getByRole('button',{name:'Regenerate'}).waitFor();
+  assert.match(seen.at(-1).messages.at(-1).content,/Players choose characters called Brawlers/);
+  await searchPage.getByRole('button',{name:'Search Wikipedia'}).click();
+  await lookupPrompt.fill('What is an echidna?');
+  await searchPage.getByRole('button',{name:'Send message'}).click();
+  await searchPage.getByText('Sources (1)',{exact:true}).click();
+  await searchPage.getByRole('link',{name:'Echidna · Wikipedia'}).waitFor();
+  assert.deepEqual(lookupCalls,['Brawl Stars','Brawl Stars','an echidna']);
   assert.deepEqual(errors,['timer could not mount']);
   console.log('Browser checks passed: desktop and mobile, Pages navigation, gameplay, cloud and on-device chat, Markdown, code, math, local history, context, Arena, cancellation, Studio isolation and ZIP.');
 } finally {await browser.close();server.close();}

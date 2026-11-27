@@ -4,6 +4,7 @@ import {prefillChat} from '../pixelai/chat-prefill.js';
 import {boundedInputs} from '../pixelai/local-prompt.js';
 import {contextFor} from '../pixelai/state.js';
 import {chatSystemPrompt,relevantGameQuery} from '../pixelai/chat-behavior.js';
+import {lookupEvidence,lookupReply,lookupRequest,searchWikipedia} from '../pixelai/lookup.js';
 import {localModels} from '../pixelai/local-models.js';
 
 function mockTokenizer() {
@@ -130,4 +131,30 @@ test('long conversational model prompts extend the attention and convolution cac
     assert.equal(step.logits.disposed,true);
     assert.equal(step.input_ids.disposed,true);
   }
+});
+
+
+test('Brawl follow-ups look up the game and keep the correction on topic',async()=>{
+  const text='In Brawl there are no Mario or Sonic';
+  const request=lookupRequest(text,[{role:'user',content:text}],false);
+  assert.equal(request.query,'Brawl Stars');
+  assert.match(lookupReply(request),/Brawlers/);
+  assert.doesNotMatch(lookupReply(request),/Mario|Sonic|Pac-Man/);
+  assert.equal(lookupRequest('Which characters?',[
+    {role:'user',content:'Tell me about Brawl Stars'},{role:'user',content:'Which characters?'}
+  ],false).query,'Brawl Stars');
+  const sources=await searchWikipedia(request,{fetchPage:async (url,options)=>{
+    assert.equal(url.origin,'https://en.wikipedia.org');
+    assert.equal(url.searchParams.get('gsrsearch'),'Brawl Stars');
+    assert.equal(options.credentials,'omit');
+    return Response.json({query:{pages:[
+      {pageid:1,title:'Other game',extract:'Irrelevant game.',index:1},
+      {pageid:2,title:'Brawl Stars',extract:'Players choose from playable characters called Brawlers.',index:2}
+    ]}});
+  }});
+  assert.deepEqual(sources.map(source=>source.url),['https://en.wikipedia.org/?curid=2']);
+  assert.match(lookupEvidence(request,sources),/acknowledge it directly/);
+  assert.equal(lookupRequest('Write a story about autumn',[],false),null);
+  assert.deepEqual(lookupRequest('What is an echidna?',[],true),{query:'an echidna'});
+  assert.deepEqual(lookupRequest('Search online for Saturn',[],false),{query:'Saturn'});
 });

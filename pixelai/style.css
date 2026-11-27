@@ -215,3 +215,5 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;bac
 .studio-console label{display:grid;gap:4px}
 .studio-console textarea{width:100%;min-height:42px;padding:7px;background:var(--surface);border:1px solid var(--line);color:var(--text);border-radius:7px}
 .studio-console pre{flex:1;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:8px;border:1px solid var(--line);border-radius:7px}
+
+.answer-sources{margin-top:8px;color:var(--muted);font-size:12px}.answer-sources summary{cursor:pointer}.answer-sources a{color:#65adff}.answer-sources p{margin:3px 0 8px}

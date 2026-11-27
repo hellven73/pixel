@@ -4,6 +4,7 @@ import {canUseLocalModel,generateLocal,removeLocalModel} from './local-model.js'
 import {codeFrom,createStudio} from './studio.js';
 import {localModels} from './local-models.js';
 import {relevantGameQuery} from './chat-behavior.js';
+import {lookupEvidence,lookupReply,lookupRequest,searchWikipedia} from './lookup.js';
 import {imageAttachment,readImage,showImage,storeImage} from './images.js';
 
 const $=id=>document.getElementById(id);
@@ -18,6 +19,7 @@ let chat=state.chats[0]||newChat(false);
 let service={ready:false,remaining:0,models:[]};
 let games=[];
 let attachment;
+let lookupEnabled=false;
 let run;
 let arena;
 let richPromise;
@@ -55,7 +57,7 @@ function applySettings() {
 }
 function updateModelLabel() {
   $('model-label').textContent=usingLocal()?localModels[state.settings.model].label:service.models.find(model=>model.id===state.settings.model)?.label||(state.settings.model==='image'?'Image Generator':'Auto');
-  $('privacy-note').textContent=usingLocal()?'On-device chat keeps prompts and attachments in this browser.':'Chats stay in this browser. Prompts go to the selected AI provider.';
+  $('privacy-note').textContent=usingLocal()?'On-device replies stay in this browser. Wikipedia receives lookup terms.':'Chats stay in this browser. Prompts go to the selected AI provider.';
 }
 function loadRich() {
   if (!richPromise) {
@@ -137,6 +139,8 @@ function canSend(mode=state.settings.model) {
     (mode==='image'?service.images:service.models.some(model=>model.available&&(mode==='auto'||model.id===mode))));
 }
 function syncControls() {
+  $('lookup-button').disabled=Boolean(run)||['vision','illustration','image'].includes(state.settings.model);
+  $('lookup-button').setAttribute('aria-pressed',String(lookupEnabled&&!$('lookup-button').disabled));
   $('stop').hidden=!run;
   $('send').hidden=Boolean(run);
   $('send').disabled=!canSend();
@@ -221,7 +225,20 @@ function row(message) {
     if (message.truncated&&chat.messages.at(-1)===message) actions.append(button('Continue writing',()=>void send('Continue exactly where the previous reply ended. Do not repeat any text.',message.mode)));
     if (message.text) actions.append(button(message.feedback?'Feedback: '+message.feedback:'Feedback',()=>feedback(message)));
   }
-  article.append(heading,body,actions);
+  article.append(heading,body);
+  if (message.sources?.length) {
+    const sources=element('details',null,{class:'answer-sources'});
+    sources.append(element('summary','Sources ('+message.sources.length+')'));
+    for (const source of message.sources) {
+      if (!/^https:\/\/(?:en\.wikipedia\.org|supercell\.com)\//.test(source.url)) continue;
+      const section=element('div',null);
+      section.append(element('a',source.title,{href:source.url,target:'_blank',rel:'noopener noreferrer'}),
+        element('p',source.extract));
+      sources.append(section);
+    }
+    article.append(sources);
+  }
+  article.append(actions);
   return {article,body};
 }
 function render(scrollToBottom=true) {
@@ -264,6 +281,7 @@ function renderHistory() {
 function switchChat(target) {
   chat=target;
   closeDrawer();
+  lookupEnabled=false;
   attachment=undefined;
   updateAttachment();
   fill('');
@@ -330,6 +348,7 @@ function branch(source,index,text,file) {
   attachment=file;
   updateAttachment();
   fill(text);
+  lookupEnabled=Boolean(source.messages[index]?.searchRequested);
   $('composer').requestSubmit();
 }
 function regenerate(message) {
@@ -479,7 +498,7 @@ async function configure() {
   else if (!service.ready) notify('Cloud chat setup is pending. Local tools and saved chats are available.');
   applySettings();syncControls();
 }
-function confirmModelDownload(text,mode) {
+function confirmModelDownload(text,mode,searchRequested) {
   const content=element('div',null,{class:'dialog-actions'});
   content.append(
     element('p',localModels[mode].description+' This model runs in your browser.'),
@@ -488,7 +507,7 @@ function confirmModelDownload(text,mode) {
       state.settings.localDownloads={...state.settings.localDownloads,[localModels[mode].repository]:true};
       persist();
       dialog.close();
-      void send(text,mode);
+      void send(text,mode,searchRequested);
     }),
     button('Cancel',()=>dialog.close())
   );
@@ -504,7 +523,7 @@ function liveUpdate(job) {
     if (follow) bottom();
   });
 }
-async function send(text,mode=state.settings.model) {
+async function send(text,mode=state.settings.model,searchRequested=lookupEnabled) {
   const local=Object.hasOwn(localModels,mode);
   if (run||!canSend(mode)||(!text.trim()&&!attachment?.image)) return;
   if (!text.trim()) text='Describe this image.';
@@ -512,17 +531,18 @@ async function send(text,mode=state.settings.model) {
   if (mode==='vision'&&!imageId) return notify('Attach an image to use Vision.',true);
   if (attachment?.image&&mode!=='vision') return notify('Select Vision to read the attached image.',true);
   if (mode==='image'&&text.length>2048) return notify('Image prompts can be up to 2,048 characters.',true);
-  if (local&&!state.settings.localDownloads?.[localModels[mode].repository]&&!(mode==='lite'&&state.settings.localAllowed)) {
-    return confirmModelDownload(text,mode);
-  }
-  const user={...newMessage('user',text),onDevice:local,mode,...(attachment?{file:attachment}:{})};
+  const user={...newMessage('user',text),onDevice:local,mode,searchRequested,...(attachment?{file:attachment}:{})};
   const answer={...newMessage('assistant',''),onDevice:local,mode,streaming:true};
   const target=chat;
   const payload=request(mode,contextFor(target,user),text);
+  const lookup=['vision','illustration','image'].includes(mode)?null:lookupRequest(text,payload.messages,searchRequested);
+  if (local&&!lookup?.correction&&!state.settings.localDownloads?.[localModels[mode].repository]&&!(mode==='lite'&&state.settings.localAllowed)) {
+    return confirmModelDownload(text,mode,searchRequested);
+  }
   if (new TextEncoder().encode(payload.messages.at(-1).content+' '+payload.instructions+' '+payload.context).length>17000) {
     return notify('This message is too long. Shorten the prompt or attachment.',true);
   }
-  attachment=undefined;updateAttachment();fill('');
+  lookupEnabled=false;attachment=undefined;updateAttachment();fill('');
   target.messages.push(user,answer);
   if (target.title==='New chat') target.title=text.replace(/\s+/g,' ').slice(0,56);
   if (!target.temporary) {
@@ -560,6 +580,35 @@ async function send(text,mode=state.settings.model) {
         notify(event.truncated?'You can continue this reply below.':'');
       }
     }};
+    if (lookup) {
+      notify('Searching Wikipedia…');
+      const lookupSignal=AbortSignal.any([signal,AbortSignal.timeout(9000)]);
+      let results=[];
+      let failure=false;
+      try {results=await searchWikipedia(lookup,{signal:lookupSignal});}
+      catch {signal.throwIfAborted();failure=true;}
+      answer.sources=[...results,...(lookup.official?[lookup.official]:[])];
+      if (!results.length&&!lookup.official) {
+        answer.text=failure?'Wikipedia search is unavailable right now. Try again in a moment.':'Wikipedia did not return a relevant article. Try a shorter search with the topic name.';
+        notify();
+        return;
+      }
+      const groundedReply=lookupReply(lookup);
+      if (groundedReply) {
+        answer.text=groundedReply;
+        answer.model='Source lookup';
+        notify();
+        return;
+      }
+      const last=payload.messages.at(-1);
+      const evidence=lookupEvidence(lookup,answer.sources);
+      if (new TextEncoder().encode(last.content+' '+evidence+' '+payload.instructions+' '+payload.context).length>15500) {
+        answer.text='I found these sources. Shorten your message or attachment to get a summary.';
+        notify();
+        return;
+      }
+      last.content+='\n\nRetrieved references:\n'+evidence;
+    }
     if (mode==='image') {
       const image=await createImage(text,options);
       signal.throwIfAborted();
@@ -828,6 +877,12 @@ $('command').onclick=commands;
 $('settings').onclick=settings;
 $('persona-button').onclick=personas;
 $('studio-button').onclick=()=>toggleStudio();
+$('lookup-button').onclick=()=>{
+  lookupEnabled=!lookupEnabled;
+  syncControls();
+  notify(lookupEnabled?'This message’s search terms will go to Wikipedia.':'');
+  prompt.focus();
+};
 $('arena-button').onclick=openArena;
 $('focus-button').onclick=toggleFocus;
 $('stop').onclick=()=>run?.controller.abort();
