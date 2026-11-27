@@ -67,3 +67,5 @@ jobs:
       - uses: actions/configure-pages@v5
       - uses: actions/deploy-pages@v4
         id: deployment
+      - name: Verify game availability on both public sites
+        run: node test/live-games-smoke.mjs
