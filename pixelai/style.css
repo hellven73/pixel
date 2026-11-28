@@ -217,3 +217,55 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;bac
 .studio-console pre{flex:1;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;padding:8px;border:1px solid var(--line);border-radius:7px}
 
 .answer-sources{margin-top:8px;color:var(--muted);font-size:12px}.answer-sources summary{cursor:pointer}.answer-sources a{color:#65adff}.answer-sources p{margin:3px 0 8px}
+
+@media (max-width:760px) {
+  .shell {
+    padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+  }
+  .sidebar, .collapsed .sidebar, .focus .sidebar {
+    width: min(var(--side-width), calc(100vw - 32px));
+    padding-bottom: max(19px, env(safe-area-inset-bottom));
+  }
+  .toolbar .icon-button, .toolbar .tool-button,
+  .compose-actions > button, .compose-actions summary {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+  }
+  .toolbar .picker, .model-trigger, #model-label {
+    min-width: 0;
+  }
+  #model-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .model-list {
+    max-height: min(65dvh, 480px);
+  }
+  .compose-actions {
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  #persona-name {
+    display: inline-block;
+    max-width: 84px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #prompt, .studio-editor, .studio-console textarea,
+  dialog input:not([type=checkbox]), dialog select, dialog textarea {
+    font-size: 16px;
+  }
+  .message-body {
+    font-size: 15px;
+  }
+  .studio:not([hidden]) {
+    padding-bottom: max(13px, env(safe-area-inset-bottom));
+    overflow: auto;
+  }
+  .studio-code, .studio iframe:not(.code-isolate) {
+    min-height: 125px;
+  }
+}
